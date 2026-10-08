@@ -1,0 +1,28 @@
+{
+  "name": "Shift Master - シフト申請・確定給与管理",
+  "short_name": "ShiftMaster",
+  "description": "FoodIT直接POST連携・給与自動計算対応のシフト管理PWA",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#1b2a4a",
+  "theme_color": "#1b2a4a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
