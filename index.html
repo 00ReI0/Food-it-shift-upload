@@ -4,11 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#1b2a4a">
-  <meta name="description" content="FoodIT直接POST連携・給与自動計算対応のシフト管理Webアプリ『Shift Master』">
+  <meta name="description" content="シフト申請 & 給与管理 Webアプリ『Shift Master』">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>Shift Master - シフト申請・確定給与管理</title>
+  <title>Shift Master</title>
 
   <!-- PWA Manifest & Icons -->
   <link rel="manifest" href="manifest.json">
@@ -31,11 +31,11 @@
           <img src="icons/icon.svg" alt="Shift Master" class="brand-icon">
           <div>
             <h1 class="brand-title">Shift Master</h1>
-            <div class="brand-subtitle">シフト申請 & 給与管理 PWA</div>
+            <div class="brand-subtitle">シフト申請 & 給与管理</div>
           </div>
         </div>
         <div class="header-actions">
-          <button id="today-btn" class="header-btn" title="今日に移動">
+          <button id="today-btn" class="header-btn" title="今月に移動">
             <span>今月</span>
           </button>
         </div>
@@ -47,11 +47,10 @@
 
       <!-- ========================================================
            タブ 1: 希望シフト登録画面（メインカレンダー）
-           ※【重要】仕様要件により給与額は非表示
            ======================================================== -->
       <section id="tab-request" class="tab-pane active">
         
-        <!-- カレンダー操作部 -->
+        <!-- カレンダーカード -->
         <div class="calendar-card">
           <div class="calendar-header">
             <div class="month-nav">
@@ -59,18 +58,15 @@
               <span id="current-month-label" class="current-month-label">----年 --月</span>
               <button id="next-month-btn" class="nav-arrow-btn" aria-label="翌月">▶</button>
             </div>
-            <span id="selected-count-badge" class="selected-count-badge" style="display:none;">0日選択中</span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span id="selected-count-badge" class="selected-count-badge" style="display:none;">0日選択中</span>
+              <button id="btn-clear-selection" class="header-btn" style="display:none;background:#f1f5f9;color:var(--c-primary);">解除</button>
+            </div>
           </div>
 
-          <!-- 複数日一括選択モードトグル -->
-          <div class="multi-select-bar">
-            <label class="multi-select-label" for="multi-select-toggle">
-              <span>📅 複数日一括選択モード</span>
-            </label>
-            <label class="switch">
-              <input type="checkbox" id="multi-select-toggle">
-              <span class="slider"></span>
-            </label>
+          <!-- 操作ガイドバー（ドラッグ選択・タップ選択） -->
+          <div class="selection-info-bar">
+            <span class="selection-hint">👆 タップまたはドラッグ（なぞり）で日付を範囲選択</span>
           </div>
 
           <!-- カレンダーグリッド -->
@@ -82,53 +78,48 @@
             <div class="calendar-weekday">金</div>
             <div class="calendar-weekday sat">土</div>
             <div class="calendar-weekday sun">日</div>
-            <!-- 日付セルはJSから動的生成 -->
           </div>
         </div>
 
-        <!-- 定型テンプレートエリア -->
+        <!-- テンプレートエリア（名称・時間・カラー変更・追加可能） -->
         <div class="templates-section">
-          <div class="section-title">
-            <span>⚡ 定型テンプレート（1タップ一括入力）</span>
+          <div class="section-title-row">
+            <div class="section-title">
+              <span>⚡ シフトプラン選択</span>
+            </div>
           </div>
-          <div class="template-chips">
-            <button class="chip-btn early" data-template="early">早番 (10-17)</button>
-            <button class="chip-btn late" data-template="late">遅番 (17-22)</button>
-            <button class="chip-btn last" data-template="last">ラスト (18-23)</button>
-            <button class="chip-btn off" data-template="off">休み</button>
-            <button class="chip-btn paid" data-template="paid">有休</button>
-          </div>
+          <!-- テンプレートチップス（JSから動的生成） -->
+          <div id="template-chips-container" class="template-chips-container"></div>
         </div>
 
-        <!-- FoodIT Direct HTTP POST 連携カード -->
-        <div class="foodit-action-card">
-          <div class="foodit-action-header">
-            <span class="foodit-badge">FoodIT Direct POST</span>
-            <span style="font-size:0.75rem;color:rgba(255,255,255,0.8);">スクレイピング不要</span>
-          </div>
-          <button id="btn-open-foodit" class="btn-foodit-submit">
-            <span>🚀 FoodITへ直接POST登録</span>
+        <!-- シフト希望申請ボタン（無駄な文言を完全排除） -->
+        <div class="request-submit-card">
+          <button id="btn-open-shift-apply" class="btn-shift-apply">
+            <span>シフト希望申請</span>
           </button>
-          <div class="foodit-hint">
-            ※ ブラウザのネイティブHTTP POST送信により、CORS制約を受けずにお使いの端末のログイン情報で直接シフトを申請します。
-          </div>
         </div>
 
       </section>
 
       <!-- ========================================================
-           タブ 2: 確定シフト & 給与計算画面
+           タブ 2: 給与計算画面 (希望試算 / 確定給与 切替可能)
            ======================================================== -->
       <section id="tab-confirmed" class="tab-pane">
+
+        <!-- 給与モード切替（希望試算 / 確定給与） -->
+        <div class="salary-mode-switch">
+          <button class="salary-mode-btn" data-mode="requested">希望シフト試算</button>
+          <button class="salary-mode-btn active" data-mode="confirmed">確定シフト給与</button>
+        </div>
 
         <!-- 給与サマリーカード（和モダンゴールド） -->
         <div class="salary-summary-card">
           <div class="salary-card-header">
             <span id="salary-period-label" class="salary-period-tag">----年 --月度</span>
-            <span style="font-size:0.72rem;background:rgba(255,255,255,0.15);padding:3px 8px;border-radius:12px;">給与概算サマリー</span>
+            <span style="font-size:0.72rem;background:rgba(255,255,255,0.15);padding:3px 8px;border-radius:12px;">給与サマリー</span>
           </div>
 
-          <div class="total-salary-label">今月の概算支給見込額</div>
+          <div class="total-salary-label">概算支給見込額（賄い控除後）</div>
           <div id="summary-total-pay" class="total-salary-val">¥0</div>
 
           <div class="salary-breakdown-grid">
@@ -149,31 +140,47 @@
               <div id="summary-night-pay" class="breakdown-amount">¥0</div>
               <div id="summary-night-hours" class="breakdown-hours">0.0h</div>
             </div>
+
+            <!-- 残業手当（8時間超え分） -->
+            <div class="breakdown-item overtime-item">
+              <div class="breakdown-label">
+                <span>残業手当 (8h超)</span>
+                <span class="breakdown-rate">+25%割増</span>
+              </div>
+              <div id="summary-overtime-pay" class="breakdown-amount">¥0</div>
+              <div id="summary-overtime-hours" class="breakdown-hours">0.0h</div>
+            </div>
+
+            <!-- 賄い控除（-320円/回） -->
+            <div class="breakdown-item deduction-item">
+              <div class="breakdown-label">
+                <span>賄い控除</span>
+                <span class="breakdown-rate" id="summary-makanai-count">0回</span>
+              </div>
+              <div id="summary-makanai-deduction" class="deduction-amount">-¥0</div>
+              <div class="breakdown-hours">320円/回</div>
+            </div>
           </div>
 
           <div class="total-hours-bar">
-            <span>月間総勤務時間</span>
+            <span>月間実働勤務時間</span>
             <span id="summary-total-hours" class="total-hours-val">0.0 時間</span>
           </div>
         </div>
 
-        <!-- アクションボタン -->
+        <!-- 確定シフト専用アクション -->
         <div class="confirmed-actions">
           <button id="btn-import-requested" class="btn-secondary">
-            <span>📥 希望シフトから確定へ反映</span>
+            <span>📥 希望シフトから確定へ一括反映</span>
           </button>
         </div>
 
-        <!-- 確定シフト一覧リスト -->
+        <!-- シフト明細一覧 -->
         <div class="confirmed-list-card">
           <div class="section-title">
-            <span>📋 確定シフト一覧</span>
+            <span>📋 勤務明細一覧</span>
           </div>
-          <div id="confirmed-shift-list" style="display:flex;flex-direction:column;gap:8px;">
-            <p style="text-align:center;color:var(--c-text-muted);font-size:0.8rem;padding:12px;">
-              確定シフトはありません。「希望シフトから確定へ反映」を押すか、カレンダーから追加できます。
-            </p>
-          </div>
+          <div id="salary-shift-list" style="display:flex;flex-direction:column;gap:8px;"></div>
         </div>
 
       </section>
@@ -183,43 +190,57 @@
            ======================================================== -->
       <section id="tab-settings" class="tab-pane">
 
+        <!-- シフトプラン管理 -->
         <div class="settings-card">
-          <div class="section-title">
-            <span>⚙️ FoodIT 連携設定</span>
+          <div class="section-title-row">
+            <div class="section-title">
+              <span>⚡ シフトプランの管理・編集</span>
+            </div>
           </div>
-
-          <div class="form-group">
-            <label class="form-label" for="setting-store-code">店舗番号 (Kgcd)</label>
-            <input type="text" id="setting-store-code" class="form-input" placeholder="例: 02006">
-            <div class="form-desc">FoodITの店舗コード（Paramの左側）</div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label" for="setting-emp-code">社員番号 (EmpCode)</label>
-            <input type="text" id="setting-emp-code" class="form-input" placeholder="例: 5155517">
-            <div class="form-desc">FoodITの社員番号（Paramの右側）</div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">自動生成認証キー (Param)</label>
-            <div id="setting-param-preview" class="param-preview-box">Param=02006|5155517</div>
-            <div class="form-desc">Direct HTTP POST送信時に自動付与されます</div>
-          </div>
+          <div id="template-manage-list" class="template-manage-list"></div>
         </div>
 
+        <!-- 給与計算レート設定 -->
         <div class="settings-card">
           <div class="section-title">
-            <span>💴 給与計算レート設定</span>
+            <span>💴 給与・控除設定</span>
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="setting-regular-wage">通常時給 (10:00〜22:00)</label>
+            <label class="form-label" for="setting-regular-wage">基本時給 (10:00〜22:00)</label>
             <input type="number" id="setting-regular-wage" class="form-input" value="1300">
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="setting-night-wage">深夜時給 (22:00〜29:00 / 25%増)</label>
+            <label class="form-label" for="setting-night-wage">深夜時給 (22:00〜29:00 / 25%割増)</label>
             <input type="number" id="setting-night-wage" class="form-input" value="1625">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="setting-makanai">賄い代 (1勤務あたり控除額)</label>
+            <input type="number" id="setting-makanai" class="form-input" value="320">
+          </div>
+        </div>
+
+        <!-- FoodIT 連携設定 -->
+        <div class="settings-card">
+          <div class="section-title">
+            <span>⚙️ FoodIT 店舗・社員設定</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="setting-store-code">店舗番号</label>
+            <input type="text" id="setting-store-code" class="form-input" placeholder="例: 02006">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="setting-emp-code">社員番号</label>
+            <input type="text" id="setting-emp-code" class="form-input" placeholder="例: 5155517">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">自動生成認証キー</label>
+            <div id="setting-param-preview" class="param-preview-box">Param=02006|5155517</div>
           </div>
 
           <button id="btn-save-settings" class="btn-primary" style="margin-top:8px;">設定を保存</button>
@@ -229,15 +250,15 @@
 
     </main>
 
-    <!-- ボトムナビゲーション (Material Design 3 準拠) -->
+    <!-- ボトムナビゲーション -->
     <nav class="bottom-nav">
       <button class="nav-item active" data-tab="tab-request">
         <span class="nav-icon">📅</span>
-        <span class="nav-label">希望シフト</span>
+        <span class="nav-label">シフト入力</span>
       </button>
       <button class="nav-item" data-tab="tab-confirmed">
         <span class="nav-icon">💴</span>
-        <span class="nav-label">確定＆給与</span>
+        <span class="nav-label">給与計算</span>
       </button>
       <button class="nav-item" data-tab="tab-settings">
         <span class="nav-icon">⚙️</span>
@@ -245,63 +266,57 @@
       </button>
     </nav>
 
-    <!-- シフト編集モーダルシート -->
-    <div id="shift-modal" class="modal-backdrop">
+    <!-- プラン編集・追加モーダル -->
+    <div id="template-edit-modal" class="modal-backdrop">
       <div class="modal-sheet">
         <div class="modal-header">
-          <div id="modal-shift-date" class="modal-title">希望シフト設定</div>
-          <button id="btn-close-modal" class="close-btn" aria-label="閉じる">×</button>
+          <div id="template-modal-title" class="modal-title">プラン設定</div>
+          <button id="btn-close-template-modal" class="close-btn" aria-label="閉じる">×</button>
         </div>
 
         <div class="form-group">
-          <label class="form-label">申請区分</label>
-          <select id="modal-shift-type" class="form-input">
-            <option value="01|0">出勤</option>
-            <option value="03|1">有休</option>
-            <option value="off">休み</option>
-          </select>
+          <label class="form-label">プラン名称</label>
+          <input type="text" id="template-name-input" class="form-input" placeholder="例: プラン1">
         </div>
 
-        <div id="modal-time-row" class="form-group">
-          <label class="form-label">希望時間帯</label>
+        <div class="form-group">
+          <label class="form-label">勤務時間帯</label>
           <div class="time-picker-grid">
-            <input type="time" id="modal-start-time" class="form-input" value="18:00">
+            <input type="time" id="template-start-time" class="form-input" value="10:00">
             <span style="font-weight:bold;color:var(--c-text-muted);">〜</span>
-            <input type="time" id="modal-end-time" class="form-input" value="23:00">
+            <input type="time" id="template-end-time" class="form-input" value="17:00">
           </div>
         </div>
 
         <div class="form-group">
-          <label class="form-label">コメント (全角25文字以内)</label>
-          <input type="text" id="modal-shift-memo" class="form-input" maxlength="25" placeholder="例: 18時以降可能です">
+          <label class="form-label">バッジカラー</label>
+          <input type="color" id="template-color-input" class="form-input" value="#1f7a4d" style="height:44px;padding:4px;cursor:pointer;">
         </div>
 
         <div class="modal-actions">
-          <button id="btn-delete-shift" class="btn-danger">削除</button>
-          <button id="btn-save-shift" class="btn-primary">保存する</button>
+          <button id="btn-delete-template" class="btn-danger" style="display:none;">削除</button>
+          <button id="btn-save-template" class="btn-primary">保存する</button>
         </div>
       </div>
     </div>
 
-    <!-- FoodIT 送信マネージャーモーダルシート -->
+    <!-- シフト希望申請モーダルシート（選択した日だけを表示して一括送信） -->
     <div id="foodit-modal" class="modal-backdrop">
       <div class="modal-sheet">
         <div class="modal-header">
-          <div class="modal-title">🚀 FoodIT Direct POST 送信</div>
+          <div class="modal-title">シフト希望申請</div>
           <button id="btn-close-foodit" class="close-btn" aria-label="閉じる">×</button>
         </div>
 
         <p style="font-size:0.8rem;color:var(--c-text-muted);">
-          希望シフトをFoodITへ直接POST送信します。別タブでFoodITの送信完了画面が開き、登録結果を確認できます。
+          選択した日程のシフトをFoodITへ送信します。
         </p>
 
-        <div id="foodit-shift-list" style="display:flex;flex-direction:column;gap:8px;max-height:45vh;overflow-y:auto;">
-          <!-- JSから希望シフト行を生成 -->
-        </div>
+        <div id="foodit-shift-list" style="display:flex;flex-direction:column;gap:8px;max-height:45vh;overflow-y:auto;"></div>
 
-        <div class="modal-actions" style="margin-top:12px;">
-          <button id="btn-foodit-submit-all" class="btn-foodit-submit" style="width:100%;">
-            <span>今月分を一括送信する</span>
+        <div class="modal-actions" style="margin-top:10px;">
+          <button id="btn-foodit-submit-all" class="btn-shift-apply">
+            <span>選択したシフトを一括送信</span>
           </button>
         </div>
       </div>

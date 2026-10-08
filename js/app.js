@@ -6,11 +6,17 @@ class ShiftMasterApp {
   constructor() {
     this.currentDate = new Date(); // カレンダー表示用
     this.selectedDates = new Set(); // 選択中日付 ("YYYY-MM-DD")
-    this.multiSelectMode = false;   // 一括選択モード
     this.activeTab = 'tab-request';  // 現在のタブ
+    this.salaryMode = 'confirmed';   // 'confirmed' (確定シフト基準) or 'requested' (希望シフト試算)
     
-    // データ初期化
+    // ドラッグ選択用状態
+    this.isDragging = false;
+    this.dragStartDate = null;
+    this.dragTargetDates = new Set();
+
+    // データ読み込み
     this.loadSettings();
+    this.loadTemplates();
     this.loadShifts();
 
     // イベントリスナーの登録
@@ -20,6 +26,7 @@ class ShiftMasterApp {
     // 初期描画
     this.renderCalendar();
     this.renderSalarySummary();
+    this.renderTemplateChips();
     this.renderSettingsUI();
   }
 
@@ -34,8 +41,8 @@ class ShiftMasterApp {
       kgcd: '0001',
       regularWage: 1300,
       nightWage: 1625,
-      workKind: '01',
-      autoBreak: true // 6時間以上45分、8時間以上60分休憩
+      makanaiDeduction: 320, // 賄い控除 320円
+      workKind: '01'
     };
 
     const saved = localStorage.getItem('shift_master_settings');
@@ -48,7 +55,7 @@ class ShiftMasterApp {
     localStorage.setItem('shift_master_settings', JSON.stringify(this.settings));
     this.showToast('設定を保存しました');
     this.renderSettingsUI();
-    this.renderSalarySummary(); // 時給変更が給与に即反映
+    this.renderSalarySummary();
   }
 
   updateParam() {
@@ -56,14 +63,125 @@ class ShiftMasterApp {
   }
 
   // ============================================================
+  // テンプレート管理 (名称・時間・カラー変更・追加可能)
+  // ============================================================
+  loadTemplates() {
+    const defaultTemplates = [
+      { id: 'plan1', name: 'プラン1', start: '10:00', end: '17:00', color: '#1f7a4d' },
+      { id: 'plan2', name: 'プラン2', start: '17:00', end: '22:00', color: '#195aa0' },
+      { id: 'plan3', name: 'プラン3', start: '18:00', end: '23:00', color: '#673ab7' }
+    ];
+
+    const saved = localStorage.getItem('shift_master_templates');
+    this.templates = saved ? JSON.parse(saved) : defaultTemplates;
+  }
+
+  saveTemplates() {
+    localStorage.setItem('shift_master_templates', JSON.stringify(this.templates));
+    this.renderTemplateChips();
+    this.renderTemplateSettingsList();
+  }
+
+  renderTemplateChips() {
+    const container = document.getElementById('template-chips-container');
+    if (!container) return;
+
+    container.innerHTML = '';
+    this.templates.forEach(tpl => {
+      const btn = document.createElement('button');
+      btn.className = 'chip-btn';
+      btn.innerHTML = `
+        <span class="chip-color-dot" style="background-color: ${tpl.color};"></span>
+        <span>${tpl.name} (${tpl.start.replace(':00','')}-${tpl.end.replace(':00','')})</span>
+      `;
+      btn.addEventListener('click', () => {
+        this.applyTemplate(tpl.id);
+      });
+      container.appendChild(btn);
+    });
+
+    // 「＋プラン追加」ボタン
+    const addBtn = document.createElement('button');
+    addBtn.className = 'chip-add-btn';
+    addBtn.innerHTML = '<span>＋ プラン追加</span>';
+    addBtn.addEventListener('click', () => {
+      this.openTemplateEditModal(null);
+    });
+    container.appendChild(addBtn);
+  }
+
+  openTemplateEditModal(templateId) {
+    const modal = document.getElementById('template-edit-modal');
+    const title = document.getElementById('template-modal-title');
+    const deleteBtn = document.getElementById('btn-delete-template');
+
+    if (templateId) {
+      const tpl = this.templates.find(t => t.id === templateId);
+      if (!tpl) return;
+      this.editingTemplateId = templateId;
+      title.textContent = 'プラン編集';
+      document.getElementById('template-name-input').value = tpl.name;
+      document.getElementById('template-start-time').value = tpl.start;
+      document.getElementById('template-end-time').value = tpl.end;
+      document.getElementById('template-color-input').value = tpl.color || '#1f7a4d';
+      deleteBtn.style.display = 'block';
+    } else {
+      this.editingTemplateId = null;
+      title.textContent = '新規プラン追加';
+      document.getElementById('template-name-input').value = `プラン${this.templates.length + 1}`;
+      document.getElementById('template-start-time').value = '17:00';
+      document.getElementById('template-end-time').value = '22:00';
+      document.getElementById('template-color-input').value = '#c68f23';
+      deleteBtn.style.display = 'none';
+    }
+
+    modal.classList.add('show');
+  }
+
+  closeTemplateEditModal() {
+    document.getElementById('template-edit-modal').classList.remove('show');
+    this.editingTemplateId = null;
+  }
+
+  saveTemplateFromModal() {
+    const name = document.getElementById('template-name-input').value.trim() || '無題プラン';
+    const start = document.getElementById('template-start-time').value;
+    const end = document.getElementById('template-end-time').value;
+    const color = document.getElementById('template-color-input').value;
+
+    if (this.editingTemplateId) {
+      const tpl = this.templates.find(t => t.id === this.editingTemplateId);
+      if (tpl) {
+        tpl.name = name;
+        tpl.start = start;
+        tpl.end = end;
+        tpl.color = color;
+      }
+    } else {
+      const newId = 'plan_' + Date.now();
+      this.templates.push({ id: newId, name, start, end, color });
+    }
+
+    this.saveTemplates();
+    this.closeTemplateEditModal();
+    this.showToast('プランを保存しました');
+  }
+
+  deleteTemplateFromModal() {
+    if (!this.editingTemplateId) return;
+    this.templates = this.templates.filter(t => t.id !== this.editingTemplateId);
+    this.saveTemplates();
+    this.closeTemplateEditModal();
+    this.showToast('プランを削除しました');
+  }
+
+  // ============================================================
   // シフトデータ管理 (LocalStorage)
   // ============================================================
   loadShifts() {
-    // 希望シフト: { "YYYY-MM-DD": { type: "01|0", start: "18:00", end: "23:00", memo: "" } }
     const savedReq = localStorage.getItem('shift_master_requested');
     this.requestedShifts = savedReq ? JSON.parse(savedReq) : {};
 
-    // 確定シフト: { "YYYY-MM-DD": { type: "01|0", start: "18:00", end: "23:00", breakMin: 0, memo: "" } }
     const savedConf = localStorage.getItem('shift_master_confirmed');
     this.confirmedShifts = savedConf ? JSON.parse(savedConf) : {};
   }
@@ -71,24 +189,36 @@ class ShiftMasterApp {
   saveRequestedShifts() {
     localStorage.setItem('shift_master_requested', JSON.stringify(this.requestedShifts));
     this.renderCalendar();
+    this.renderSalarySummary();
   }
 
   saveConfirmedShifts() {
     localStorage.setItem('shift_master_confirmed', JSON.stringify(this.confirmedShifts));
+    this.renderCalendar();
     this.renderSalarySummary();
   }
 
   // ============================================================
-  // 給与計算ロジック (22:00前後の精密時間分割)
+  // 新・給与計算ロジック
+  // - 休憩時間: 拘束時間 ≤6h: 20分, 6〜8h: 45分, >8h: 60分
+  // - 賄い控除: 1勤務あたり320円控除
+  // - 残業手当: 実働8時間超え分は時給25%増 (通常時給×1.25)
+  // - 深夜時間帯: 22:00〜翌5:00 (通常時給×1.25)
   // ============================================================
-  /**
-   * 単一日のシフトから通常時間・深夜時間・それぞれの給与を計算
-   * 通常時間帯: 10:00 〜 22:00 (基本時給: 1,300円)
-   * 深夜時間帯: 22:00 〜 29:00 (翌05:00) (深夜割増25%: 1,625円)
-   */
   calculateDaySalary(shift) {
-    if (!shift || shift.type === 'off' || shift.type === '03|1' || !shift.start || !shift.end) {
-      return { regularHours: 0, nightHours: 0, totalHours: 0, regularPay: 0, nightPay: 0, totalPay: 0 };
+    if (!shift || !shift.start || !shift.end) {
+      return {
+        regularHours: 0,
+        nightHours: 0,
+        overtimeHours: 0,
+        totalWorkHours: 0,
+        breakMinutes: 0,
+        regularPay: 0,
+        nightPay: 0,
+        overtimePay: 0,
+        makanaiDeduction: 0,
+        totalPay: 0
+      };
     }
 
     const [stH, stM] = shift.start.split(':').map(Number);
@@ -97,80 +227,98 @@ class ShiftMasterApp {
     let startMinutes = stH * 60 + stM;
     let endMinutes = edH * 60 + edM;
 
-    // 翌日にまたがる場合（例: 23:00〜翌2:00）
+    // 翌日にまたがる場合
     if (endMinutes < startMinutes) {
       endMinutes += 24 * 60;
     }
 
-    // 22:00の分数表現 (22 * 60 = 1320)
-    const nightThreshold = 22 * 60;
-    const morningThreshold = 29 * 60; // 翌朝5:00 (1740)
+    const totalSpanMinutes = endMinutes - startMinutes; // 拘束時間
 
-    let regularMinutes = 0;
-    let nightMinutes = 0;
+    // 【要件】休憩時間ルール
+    let breakMinutes = 0;
+    if (totalSpanMinutes <= 6 * 60) {
+      breakMinutes = 20; // 6時間以内なら20分
+    } else if (totalSpanMinutes <= 8 * 60) {
+      breakMinutes = 45; // 6〜8時間なら45分
+    } else {
+      breakMinutes = 60; // 8時間以上なら1時間
+    }
 
-    // 1分刻みで精密積算（または区間判定）
+    // 1分刻みで精密積算
+    let rawRegMin = 0;
+    let rawNightMin = 0;
+
     for (let m = startMinutes; m < endMinutes; m++) {
       const normalizedM = m % (24 * 60);
       // 深夜判定: 22:00 (1320) 〜 翌05:00 (300)
       if (normalizedM >= 1320 || normalizedM < 300) {
-        nightMinutes++;
+        rawNightMin++;
       } else {
-        regularMinutes++;
-      }
-    }
-
-    // 休憩時間の控除（分）
-    let breakMin = shift.breakMin !== undefined ? Number(shift.breakMin) : 0;
-    if (this.settings.autoBreak && breakMin === 0) {
-      const totalWorkM = endMinutes - startMinutes;
-      if (totalWorkM > 8 * 60) {
-        breakMin = 60;
-      } else if (totalWorkM > 6 * 60) {
-        breakMin = 45;
+        rawRegMin++;
       }
     }
 
     // 休憩時間は通常勤務から優先控除
-    if (breakMin > 0) {
-      if (regularMinutes >= breakMin) {
-        regularMinutes -= breakMin;
-      } else {
-        const remaining = breakMin - regularMinutes;
-        regularMinutes = 0;
-        nightMinutes = Math.max(0, nightMinutes - remaining);
-      }
+    let netRegMin = rawRegMin;
+    let netNightMin = rawNightMin;
+
+    if (netRegMin >= breakMinutes) {
+      netRegMin -= breakMinutes;
+    } else {
+      const remainBreak = breakMinutes - netRegMin;
+      netRegMin = 0;
+      netNightMin = Math.max(0, netNightMin - remainBreak);
     }
 
-    const regularHours = regularMinutes / 60;
-    const nightHours = nightMinutes / 60;
-    const totalHours = regularHours + nightHours;
+    const totalWorkMinutes = netRegMin + netNightMin;
+    const totalWorkHours = totalWorkMinutes / 60;
+
+    // 【要件】残業判定（実働8時間超え分）
+    const overtimeMinutes = Math.max(0, totalWorkMinutes - 8 * 60);
+    const overtimeHours = overtimeMinutes / 60;
 
     const regularRate = Number(this.settings.regularWage) || 1300;
     const nightRate = Number(this.settings.nightWage) || 1625;
+    const overtimeExtraRate = regularRate * 0.25; // 残業手当割増分（時給25%増）
+
+    // 基本通常給与 + 深夜給与
+    const regularHours = netRegMin / 60;
+    const nightHours = netNightMin / 60;
 
     const regularPay = Math.round(regularHours * regularRate);
     const nightPay = Math.round(nightHours * nightRate);
-    const totalPay = regularPay + nightPay;
+
+    // 残業割増手当（8時間超え分に時給25%追加）
+    const overtimePay = Math.round(overtimeHours * overtimeExtraRate);
+
+    // 【要件】賄い控除（1勤務あたり320円）
+    const makanaiDeduction = Number(this.settings.makanaiDeduction) || 320;
+
+    // 総給与（手当加算、賄い控除）
+    const grossPay = regularPay + nightPay + overtimePay;
+    const totalPay = Math.max(0, grossPay - makanaiDeduction);
 
     return {
       regularHours: Number(regularHours.toFixed(2)),
       nightHours: Number(nightHours.toFixed(2)),
-      totalHours: Number(totalHours.toFixed(2)),
+      overtimeHours: Number(overtimeHours.toFixed(2)),
+      totalWorkHours: Number(totalWorkHours.toFixed(2)),
+      breakMinutes,
       regularPay,
       nightPay,
+      overtimePay,
+      makanaiDeduction,
       totalPay
     };
   }
 
   // ============================================================
-  // カレンダー描画 (希望シフト画面)
+  // カレンダー描画 & ドラッグ範囲選択
   // ============================================================
   renderCalendar() {
     const year = this.currentDate.getFullYear();
-    const month = this.currentDate.getMonth(); // 0-indexed
+    const month = this.currentDate.getMonth();
 
-    // 年月ラベル
     const monthLabel = document.getElementById('current-month-label');
     if (monthLabel) {
       monthLabel.textContent = `${year}年 ${month + 1}月`;
@@ -179,18 +327,16 @@ class ShiftMasterApp {
     const grid = document.getElementById('calendar-grid');
     if (!grid) return;
 
-    // 曜日ヘッダー以外の既存セルを削除
     const oldDays = grid.querySelectorAll('.calendar-day');
     oldDays.forEach(d => d.remove());
 
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
 
-    // 月曜始まりの曜日インデックス (0:月, 1:火, ... 6:日)
     let startDayOfWeek = firstDay.getDay() - 1;
     if (startDayOfWeek === -1) startDayOfWeek = 6;
 
-    // 前月の末尾日を埋める
+    // 前月
     const prevMonthLastDay = new Date(year, month, 0).getDate();
     for (let i = startDayOfWeek - 1; i >= 0; i--) {
       const dayNum = prevMonthLastDay - i;
@@ -199,7 +345,7 @@ class ShiftMasterApp {
       grid.appendChild(this.createDayCell(dayNum, dateStr, true));
     }
 
-    // 当月の日付セル
+    // 当月
     const todayStr = this.formatDate(new Date());
     for (let d = 1; d <= lastDay.getDate(); d++) {
       const curDate = new Date(year, month, d);
@@ -208,7 +354,7 @@ class ShiftMasterApp {
       grid.appendChild(this.createDayCell(d, dateStr, false, isToday));
     }
 
-    // 次月の頭日を埋めてグリッド（7列）を揃える
+    // 次月
     const totalCells = startDayOfWeek + lastDay.getDate();
     const remaining = (7 - (totalCells % 7)) % 7;
     for (let d = 1; d <= remaining; d++) {
@@ -217,17 +363,18 @@ class ShiftMasterApp {
       grid.appendChild(this.createDayCell(d, dateStr, true));
     }
 
-    this.updateMultiSelectBadge();
+    this.updateSelectionInfo();
   }
 
   createDayCell(dayNum, dateStr, isOtherMonth, isToday = false) {
     const cell = document.createElement('div');
     cell.className = 'calendar-day';
+    cell.dataset.date = dateStr;
+
     if (isOtherMonth) cell.classList.add('other-month');
     if (isToday) cell.classList.add('today');
     if (this.selectedDates.has(dateStr)) cell.classList.add('selected');
 
-    // 曜日判定
     const dayOfWeek = new Date(dateStr).getDay();
     if (dayOfWeek === 6) cell.classList.add('sat');
     if (dayOfWeek === 0) cell.classList.add('sun');
@@ -240,203 +387,211 @@ class ShiftMasterApp {
     dayHeader.appendChild(numSpan);
     cell.appendChild(dayHeader);
 
-    // シフト希望データがあればバッジを表示（※要件: 給与額は絶対に表示しない）
-    const shift = this.requestedShifts[dateStr];
-    if (shift) {
+    // シフトデータ表示
+    // 希望シフト画面では希望シフト、確定画面では確定シフトを表示
+    const targetSource = (this.activeTab === 'tab-confirmed') ? this.confirmedShifts : this.requestedShifts;
+    const shift = targetSource[dateStr];
+
+    if (shift && shift.start && shift.end) {
       const tag = document.createElement('div');
       tag.className = 'shift-tag';
-      
-      let tagText = '';
-      if (shift.type === '03|1') {
-        tag.classList.add('paid');
-        tagText = '有休';
-      } else if (shift.type === 'off') {
-        tag.classList.add('off');
-        tagText = '休み';
+
+      // 該当するテンプレートを検索
+      const matchedTpl = this.templates.find(t => t.start === shift.start && t.end === shift.end);
+      if (matchedTpl) {
+        tag.textContent = matchedTpl.name;
+        tag.style.backgroundColor = matchedTpl.color;
       } else {
-        // 出勤の場合
-        if (shift.start === '10:00' && shift.end === '17:00') {
-          tag.classList.add('early');
-          tagText = '早番';
-        } else if (shift.start === '17:00' && shift.end === '22:00') {
-          tag.classList.add('late');
-          tagText = '遅番';
-        } else if (shift.start === '18:00' && shift.end === '23:00') {
-          tag.classList.add('last');
-          tagText = 'ラスト';
-        } else {
-          tag.classList.add('custom');
-          tagText = '出勤';
-        }
+        tag.textContent = '勤務';
+        tag.style.backgroundColor = '#1b2a4a';
       }
-      tag.textContent = tagText;
       cell.appendChild(tag);
 
-      // 時間帯表示（出勤時のみ）
-      if (shift.type !== 'off' && shift.type !== '03|1' && shift.start && shift.end) {
-        const timeSub = document.createElement('div');
-        timeSub.className = 'shift-time-sub';
-        timeSub.textContent = `${shift.start.replace(':00','')}-${shift.end.replace(':00','')}`;
-        cell.appendChild(timeSub);
-      }
+      const timeSub = document.createElement('div');
+      timeSub.className = 'shift-time-sub';
+      timeSub.textContent = `${shift.start.replace(':00','')}-${shift.end.replace(':00','')}`;
+      cell.appendChild(timeSub);
     }
 
-    // クリックイベント
-    cell.addEventListener('click', () => {
-      this.handleDayClick(dateStr);
+    // マウスドラッグ操作（範囲選択）
+    cell.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      this.isDragging = true;
+      this.dragStartDate = dateStr;
+      this.dragTargetDates = new Set([dateStr]);
+      this.highlightDragRange(dateStr, dateStr);
+    });
+
+    cell.addEventListener('mouseenter', () => {
+      if (this.isDragging && this.dragStartDate) {
+        this.highlightDragRange(this.dragStartDate, dateStr);
+      }
+    });
+
+    // タッチ操作（スマホでのドラッグ範囲選択対応）
+    cell.addEventListener('touchstart', (e) => {
+      this.isDragging = true;
+      this.dragStartDate = dateStr;
+      this.dragTargetDates = new Set([dateStr]);
+      this.highlightDragRange(dateStr, dateStr);
+    }, { passive: true });
+
+    cell.addEventListener('touchmove', (e) => {
+      if (!this.isDragging || !this.dragStartDate) return;
+      const touch = e.touches[0];
+      const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
+      const dayElement = targetElement?.closest('.calendar-day');
+      if (dayElement && dayElement.dataset.date) {
+        this.highlightDragRange(this.dragStartDate, dayElement.dataset.date);
+      }
+    }, { passive: true });
+
+    // クリック（単一選択/モーダル）
+    cell.addEventListener('click', (e) => {
+      if (!this.dragTriggered) {
+        this.handleCellSingleClick(dateStr);
+      }
     });
 
     return cell;
   }
 
-  handleDayClick(dateStr) {
-    if (this.multiSelectMode) {
-      // 一括選択モード: 選択トグル
-      if (this.selectedDates.has(dateStr)) {
-        this.selectedDates.delete(dateStr);
-      } else {
-        this.selectedDates.add(dateStr);
-      }
-      this.renderCalendar();
-    } else {
-      // 単一日モード: シフト入力モーダルを開く
-      this.openShiftModal(dateStr);
+  // ドラッグ範囲の計算とハイライト
+  highlightDragRange(startStr, endStr) {
+    this.dragTriggered = true;
+    const start = new Date(startStr);
+    const end = new Date(endStr);
+    const minDate = start <= end ? start : end;
+    const maxDate = start <= end ? end : start;
+
+    this.dragTargetDates.clear();
+    const cur = new Date(minDate);
+    while (cur <= maxDate) {
+      this.dragTargetDates.add(this.formatDate(cur));
+      cur.setDate(cur.getDate() + 1);
     }
+
+    // カレンダーセルをハイライト
+    document.querySelectorAll('.calendar-day').forEach(el => {
+      const d = el.dataset.date;
+      if (this.dragTargetDates.has(d)) {
+        el.classList.add('drag-selecting');
+      } else {
+        el.classList.remove('drag-selecting');
+      }
+    });
   }
 
-  updateMultiSelectBadge() {
+  finishDragSelection() {
+    if (!this.isDragging) return;
+    this.isDragging = false;
+
+    if (this.dragTargetDates.size > 0) {
+      // ドラッグした範囲を選択リストに追加
+      this.dragTargetDates.forEach(d => this.selectedDates.add(d));
+      this.dragTargetDates.clear();
+      this.renderCalendar();
+    }
+
+    setTimeout(() => {
+      this.dragTriggered = false;
+    }, 100);
+  }
+
+  handleCellSingleClick(dateStr) {
+    if (this.selectedDates.has(dateStr)) {
+      this.selectedDates.delete(dateStr);
+    } else {
+      this.selectedDates.add(dateStr);
+    }
+    this.renderCalendar();
+  }
+
+  updateSelectionInfo() {
     const badge = document.getElementById('selected-count-badge');
+    const clearBtn = document.getElementById('btn-clear-selection');
     if (badge) {
       badge.textContent = `${this.selectedDates.size}日選択中`;
       badge.style.display = this.selectedDates.size > 0 ? 'inline-block' : 'none';
     }
+    if (clearBtn) {
+      clearBtn.style.display = this.selectedDates.size > 0 ? 'inline-block' : 'none';
+    }
+  }
+
+  clearSelection() {
+    this.selectedDates.clear();
+    this.renderCalendar();
   }
 
   // ============================================================
   // 定型テンプレート適用
   // ============================================================
-  applyTemplate(templateKey) {
-    const templates = {
-      early: { type: '01|0', start: '10:00', end: '17:00', name: '早番' },
-      late:  { type: '01|0', start: '17:00', end: '22:00', name: '遅番' },
-      last:  { type: '01|0', start: '18:00', end: '23:00', name: 'ラスト' },
-      off:   { type: 'off',  start: '',      end: '',      name: '休み' },
-      paid:  { type: '03|1', start: '',      end: '',      name: '有休' }
-    };
-
-    const targetTemplate = templates[templateKey];
-    if (!targetTemplate) return;
+  applyTemplate(templateId) {
+    const tpl = this.templates.find(t => t.id === templateId);
+    if (!tpl) return;
 
     if (this.selectedDates.size === 0) {
-      this.showToast('カレンダーの日付をタップして選択してください');
+      this.showToast('カレンダーの日付をタップまたはドラッグして選択してください');
       return;
     }
 
-    // 選択された全日付にテンプレートを適用
+    const targetStore = (this.activeTab === 'tab-confirmed') ? this.confirmedShifts : this.requestedShifts;
+
     this.selectedDates.forEach(dateStr => {
-      this.requestedShifts[dateStr] = {
-        type: targetTemplate.type,
-        start: targetTemplate.start,
-        end: targetTemplate.end,
+      targetStore[dateStr] = {
+        type: '01|0',
+        start: tpl.start,
+        end: tpl.end,
         memo: ''
       };
     });
 
-    this.saveRequestedShifts();
-    this.showToast(`${this.selectedDates.size}日間に「${targetTemplate.name}」を一括設定しました`);
-  }
-
-  // ============================================================
-  // 単一日シフト編集モーダル
-  // ============================================================
-  openShiftModal(dateStr) {
-    this.editingDate = dateStr;
-    const modal = document.getElementById('shift-modal');
-    const title = document.getElementById('modal-shift-date');
-    const curShift = this.requestedShifts[dateStr] || { type: '01|0', start: '18:00', end: '23:00', memo: '' };
-
-    const [y, m, d] = dateStr.split('-');
-    title.textContent = `${Number(m)}月${Number(d)}日の希望シフト`;
-
-    document.getElementById('modal-shift-type').value = curShift.type || '01|0';
-    document.getElementById('modal-start-time').value = curShift.start || '18:00';
-    document.getElementById('modal-end-time').value = curShift.end || '23:00';
-    document.getElementById('modal-shift-memo').value = curShift.memo || '';
-
-    this.toggleTimeInputsVisibility(curShift.type);
-    modal.classList.add('show');
-  }
-
-  closeShiftModal() {
-    const modal = document.getElementById('shift-modal');
-    modal.classList.remove('show');
-    this.editingDate = null;
-  }
-
-  toggleTimeInputsVisibility(type) {
-    const timeRow = document.getElementById('modal-time-row');
-    if (type === 'off' || type === '03|1') {
-      timeRow.style.display = 'none';
+    if (this.activeTab === 'tab-confirmed') {
+      this.saveConfirmedShifts();
     } else {
-      timeRow.style.display = 'grid';
+      this.saveRequestedShifts();
     }
-  }
 
-  saveModalShift() {
-    if (!this.editingDate) return;
-    const type = document.getElementById('modal-shift-type').value;
-    const start = document.getElementById('modal-start-time').value;
-    const end = document.getElementById('modal-end-time').value;
-    const memo = document.getElementById('modal-shift-memo').value;
-
-    this.requestedShifts[this.editingDate] = { type, start, end, memo };
-    this.saveRequestedShifts();
-    this.closeShiftModal();
-    this.showToast('希望シフトを保存しました');
-  }
-
-  deleteModalShift() {
-    if (!this.editingDate) return;
-    delete this.requestedShifts[this.editingDate];
-    this.saveRequestedShifts();
-    this.closeShiftModal();
-    this.showToast('シフトを削除しました');
+    this.showToast(`${this.selectedDates.size}日間に「${tpl.name}」を一括登録しました`);
+    this.selectedDates.clear();
+    this.renderCalendar();
   }
 
   // ============================================================
-  // FoodIT 連携ダイアログ (Direct HTTP POST)
+  // FoodIT 連携ダイアログ (選択した日だけを一括登録)
   // ============================================================
   openFoodITSubmitModal() {
+    if (this.selectedDates.size === 0) {
+      this.showToast('カレンダーで申請したい日付を選択してください');
+      return;
+    }
+
     const modal = document.getElementById('foodit-modal');
     const listContainer = document.getElementById('foodit-shift-list');
     listContainer.innerHTML = '';
 
-    // 当月の希望シフト一覧を抽出
-    const year = this.currentDate.getFullYear();
-    const month = String(this.currentDate.getMonth() + 1).padStart(2, '0');
-    const prefix = `${year}-${month}`;
+    // 選択された日付の中で希望シフトが存在するものを抽出
+    const targets = Array.from(this.selectedDates)
+      .sort()
+      .map(dateStr => ({ dateStr, shift: this.requestedShifts[dateStr] }))
+      .filter(item => item.shift && item.shift.start && item.shift.end);
 
-    const monthShifts = Object.entries(this.requestedShifts)
-      .filter(([dateStr]) => dateStr.startsWith(prefix))
-      .sort((a, b) => a[0].localeCompare(b[0]));
-
-    if (monthShifts.length === 0) {
-      listContainer.innerHTML = `<p style="text-align:center;color:var(--c-text-muted);padding:20px;">${year}年${Number(month)}月の希望シフトがまだ登録されていません。</p>`;
+    if (targets.length === 0) {
+      listContainer.innerHTML = `<p style="text-align:center;color:var(--c-text-muted);padding:20px;">選択した日付に希望シフトが入力されていません。</p>`;
       document.getElementById('btn-foodit-submit-all').style.display = 'none';
     } else {
       document.getElementById('btn-foodit-submit-all').style.display = 'flex';
-      monthShifts.forEach(([dateStr, shift]) => {
+      targets.forEach(({ dateStr, shift }) => {
         const item = document.createElement('div');
         item.className = 'confirmed-item';
-        
-        const typeText = shift.type === '03|1' ? '有休' : (shift.type === 'off' ? '休み' : `${shift.start}〜${shift.end}`);
         item.innerHTML = `
           <div>
             <div class="confirmed-date">${dateStr}</div>
-            <div class="confirmed-time">${typeText} ${shift.memo ? ' (' + shift.memo + ')' : ''}</div>
+            <div class="confirmed-time">${shift.start}〜${shift.end}</div>
           </div>
           <div style="display:flex;gap:6px;">
-            <button class="header-btn" style="background:var(--c-primary);color:#fff;" onclick="window.app.submitSingleFoodIT('${dateStr}')">POST送信</button>
+            <button class="header-btn" style="background:var(--c-primary);color:#fff;" onclick="window.app.submitSingleFoodIT('${dateStr}')">送信</button>
             <button class="header-btn" style="background:#f1f5f9;color:var(--c-primary);" onclick="window.app.showCurl('${dateStr}')">cURL</button>
           </div>
         `;
@@ -460,38 +615,34 @@ class ShiftMasterApp {
       return;
     }
 
-    // Direct HTTP Form POST を実行
-    const result = window.FoodIT.submitDirectForm(dateStr, shift, this.settings, true);
-    this.showToast(`${dateStr} のPOST送信を実行しました（別タブをご確認ください）`);
+    window.FoodIT.submitDirectForm(dateStr, shift, this.settings, true);
+    this.showToast(`${dateStr} を送信しました`);
   }
 
-  submitAllMonthFoodIT() {
-    const year = this.currentDate.getFullYear();
-    const month = String(this.currentDate.getMonth() + 1).padStart(2, '0');
-    const prefix = `${year}-${month}`;
+  submitSelectedFoodIT() {
+    const targets = Array.from(this.selectedDates)
+      .sort()
+      .map(dateStr => ({ dateStr, shift: this.requestedShifts[dateStr] }))
+      .filter(item => item.shift && item.shift.start && item.shift.end);
 
-    const monthShifts = Object.entries(this.requestedShifts)
-      .filter(([dateStr]) => dateStr.startsWith(prefix))
-      .sort((a, b) => a[0].localeCompare(b[0]));
+    if (targets.length === 0) return;
 
-    if (monthShifts.length === 0) return;
-
-    // 順次送信
     let idx = 0;
     const sendNext = () => {
-      if (idx >= monthShifts.length) {
-        this.showToast('全ての希望シフトの送信が完了しました！');
+      if (idx >= targets.length) {
+        this.showToast('選択したシフトの申請が完了しました！');
+        this.closeFoodITModal();
         return;
       }
-      const [dateStr, shift] = monthShifts[idx];
+      const { dateStr, shift } = targets[idx];
       window.FoodIT.submitDirectForm(dateStr, shift, this.settings, true);
       idx++;
-      if (idx < monthShifts.length) {
-        setTimeout(sendNext, 800); // サーバー負荷軽減のためディレイ
+      if (idx < targets.length) {
+        setTimeout(sendNext, 800);
       }
     };
 
-    if (confirm(`${monthShifts.length}日分のシフトをFoodITへDirect POST送信しますか？`)) {
+    if (confirm(`選択した${targets.length}日分のシフトを申請しますか？`)) {
       sendNext();
     }
   }
@@ -501,38 +652,48 @@ class ShiftMasterApp {
     if (!shift) return;
     const cmd = window.FoodIT.generateCurlCommand(dateStr, shift, this.settings);
     navigator.clipboard.writeText(cmd).then(() => {
-      this.showToast('cURLコマンドをクリップボードにコピーしました！ターミナルで実行できます。');
+      this.showToast('cURLコマンドをコピーしました');
     }).catch(() => {
-      prompt('cURLコマンドをコピーしてください:', cmd);
+      prompt('cURLコマンド:', cmd);
     });
   }
 
   // ============================================================
-  // 確定シフト & 給与計算画面
+  // 給与計算画面 (希望シフト試算 / 確定シフト計算 切替対応)
   // ============================================================
   renderSalarySummary() {
     const year = this.currentDate.getFullYear();
     const month = String(this.currentDate.getMonth() + 1).padStart(2, '0');
     const prefix = `${year}-${month}`;
 
+    const targetShifts = (this.salaryMode === 'requested') ? this.requestedShifts : this.confirmedShifts;
+
     let totalRegHours = 0;
     let totalNightHours = 0;
+    let totalOvertimeHours = 0;
     let totalRegPay = 0;
     let totalNightPay = 0;
+    let totalOvertimePay = 0;
+    let totalMakanaiCount = 0;
 
-    const listContainer = document.getElementById('confirmed-shift-list');
+    const listContainer = document.getElementById('salary-shift-list');
     if (listContainer) listContainer.innerHTML = '';
 
-    const monthConf = Object.entries(this.confirmedShifts)
+    const monthShifts = Object.entries(targetShifts)
       .filter(([dateStr]) => dateStr.startsWith(prefix))
       .sort((a, b) => a[0].localeCompare(b[0]));
 
-    monthConf.forEach(([dateStr, shift]) => {
+    monthShifts.forEach(([dateStr, shift]) => {
+      if (!shift || !shift.start || !shift.end) return;
+
       const calc = this.calculateDaySalary(shift);
       totalRegHours += calc.regularHours;
       totalNightHours += calc.nightHours;
+      totalOvertimeHours += calc.overtimeHours;
       totalRegPay += calc.regularPay;
       totalNightPay += calc.nightPay;
+      totalOvertimePay += calc.overtimePay;
+      totalMakanaiCount++;
 
       if (listContainer) {
         const item = document.createElement('div');
@@ -540,26 +701,28 @@ class ShiftMasterApp {
         item.innerHTML = `
           <div>
             <div class="confirmed-date">${dateStr}</div>
-            <div class="confirmed-time">${shift.start} 〜 ${shift.end} (休: ${shift.breakMin || 0}分)</div>
+            <div class="confirmed-time">${shift.start}〜${shift.end} (休:${calc.breakMinutes}分)</div>
           </div>
           <div class="confirmed-pay">
             <div class="confirmed-pay-val">¥${calc.totalPay.toLocaleString()}</div>
-            <div class="confirmed-pay-hours">${calc.totalHours}h (深夜 ${calc.nightHours}h)</div>
+            <div class="confirmed-pay-hours">実働${calc.totalWorkHours}h (残業:${calc.overtimeHours}h 賄い:-¥${calc.makanaiDeduction})</div>
           </div>
         `;
         listContainer.appendChild(item);
       }
     });
 
-    const totalHours = totalRegHours + totalNightHours;
-    const totalPay = totalRegPay + totalNightPay;
+    const totalWorkHours = totalRegHours + totalNightHours;
+    const totalMakanaiDeduction = totalMakanaiCount * (Number(this.settings.makanaiDeduction) || 320);
+    const grossTotal = totalRegPay + totalNightPay + totalOvertimePay;
+    const finalTotalPay = Math.max(0, grossTotal - totalMakanaiDeduction);
 
-    // DOMへのサマリー反映
+    // DOMへの反映
     const sumTotalPay = document.getElementById('summary-total-pay');
-    if (sumTotalPay) sumTotalPay.textContent = `¥${totalPay.toLocaleString()}`;
+    if (sumTotalPay) sumTotalPay.textContent = `¥${finalTotalPay.toLocaleString()}`;
 
     const sumTotalHours = document.getElementById('summary-total-hours');
-    if (sumTotalHours) sumTotalHours.textContent = `${totalHours.toFixed(1)} 時間`;
+    if (sumTotalHours) sumTotalHours.textContent = `${totalWorkHours.toFixed(1)} 時間`;
 
     const sumRegPay = document.getElementById('summary-regular-pay');
     if (sumRegPay) sumRegPay.textContent = `¥${totalRegPay.toLocaleString()}`;
@@ -571,23 +734,41 @@ class ShiftMasterApp {
     const sumNightHours = document.getElementById('summary-night-hours');
     if (sumNightHours) sumNightHours.textContent = `${totalNightHours.toFixed(1)}h`;
 
+    const sumOvertimePay = document.getElementById('summary-overtime-pay');
+    if (sumOvertimePay) sumOvertimePay.textContent = `¥${totalOvertimePay.toLocaleString()}`;
+    const sumOvertimeHours = document.getElementById('summary-overtime-hours');
+    if (sumOvertimeHours) sumOvertimeHours.textContent = `${totalOvertimeHours.toFixed(1)}h`;
+
+    const sumMakanaiPay = document.getElementById('summary-makanai-deduction');
+    if (sumMakanaiPay) sumMakanaiPay.textContent = `-¥${totalMakanaiDeduction.toLocaleString()}`;
+    const sumMakanaiCount = document.getElementById('summary-makanai-count');
+    if (sumMakanaiCount) sumMakanaiCount.textContent = `${totalMakanaiCount}回`;
+
     const salaryPeriod = document.getElementById('salary-period-label');
-    if (salaryPeriod) salaryPeriod.textContent = `${year}年 ${Number(month)}月度`;
+    if (salaryPeriod) {
+      const modeLabel = this.salaryMode === 'requested' ? '【希望試算】' : '【確定給与】';
+      salaryPeriod.textContent = `${modeLabel} ${year}年 ${Number(month)}月度`;
+    }
   }
 
-  /**
-   * 希望シフトから確定シフトへ一括インポート
-   */
+  setSalaryMode(mode) {
+    this.salaryMode = mode;
+    document.querySelectorAll('.salary-mode-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.mode === mode);
+    });
+    this.renderSalarySummary();
+  }
+
   importRequestedToConfirmed() {
     const year = this.currentDate.getFullYear();
     const month = String(this.currentDate.getMonth() + 1).padStart(2, '0');
     const prefix = `${year}-${month}`;
 
     const monthReq = Object.entries(this.requestedShifts)
-      .filter(([dateStr]) => dateStr.startsWith(prefix));
+      .filter(([dateStr]) => dateStr.startsWith(prefix) && this.requestedShifts[dateStr]?.start);
 
     if (monthReq.length === 0) {
-      this.showToast('インポート可能な希望シフトがありません');
+      this.showToast('反映可能な希望シフトがありません');
       return;
     }
 
@@ -596,19 +777,11 @@ class ShiftMasterApp {
     }
 
     monthReq.forEach(([dateStr, shift]) => {
-      if (shift.type !== 'off' && shift.type !== '03|1') {
-        this.confirmedShifts[dateStr] = {
-          type: shift.type,
-          start: shift.start,
-          end: shift.end,
-          breakMin: 0,
-          memo: shift.memo || ''
-        };
-      }
+      this.confirmedShifts[dateStr] = { ...shift };
     });
 
     this.saveConfirmedShifts();
-    this.showToast('希望シフトを確定シフトへ反映しました');
+    this.showToast('確定シフトへ反映しました');
   }
 
   // ============================================================
@@ -620,12 +793,36 @@ class ShiftMasterApp {
     const paramPreview = document.getElementById('setting-param-preview');
     const regWageInput = document.getElementById('setting-regular-wage');
     const nightWageInput = document.getElementById('setting-night-wage');
+    const makanaiInput = document.getElementById('setting-makanai');
 
     if (storeInput) storeInput.value = this.settings.storeCode || '';
     if (empInput) empInput.value = this.settings.empCode || '';
     if (paramPreview) paramPreview.textContent = `Param=${this.settings.param || ''}`;
     if (regWageInput) regWageInput.value = this.settings.regularWage || 1300;
     if (nightWageInput) nightWageInput.value = this.settings.nightWage || 1625;
+    if (makanaiInput) makanaiInput.value = this.settings.makanaiDeduction || 320;
+
+    this.renderTemplateSettingsList();
+  }
+
+  renderTemplateSettingsList() {
+    const list = document.getElementById('template-manage-list');
+    if (!list) return;
+
+    list.innerHTML = '';
+    this.templates.forEach(tpl => {
+      const item = document.createElement('div');
+      item.className = 'template-manage-item';
+      item.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="chip-color-dot" style="background-color:${tpl.color};"></span>
+          <strong>${tpl.name}</strong>
+          <span style="font-size:0.75rem;color:var(--c-text-muted);">${tpl.start}〜${tpl.end}</span>
+        </div>
+        <button class="header-btn" style="background:var(--c-primary);color:#fff;" onclick="window.app.openTemplateEditModal('${tpl.id}')">編集</button>
+      `;
+      list.appendChild(item);
+    });
   }
 
   // ============================================================
@@ -633,9 +830,8 @@ class ShiftMasterApp {
   // ============================================================
   initEventListeners() {
     // タブ切り替え
-    const navItems = document.querySelectorAll('.nav-item');
-    navItems.forEach(item => {
-      item.addEventListener('click', (e) => {
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => {
         const tabTarget = item.getAttribute('data-tab');
         this.switchTab(tabTarget);
       });
@@ -644,81 +840,86 @@ class ShiftMasterApp {
     // カレンダー前月・次月・今日
     document.getElementById('prev-month-btn')?.addEventListener('click', () => {
       this.currentDate.setMonth(this.currentDate.getMonth() - 1);
+      this.selectedDates.clear();
       this.renderCalendar();
       this.renderSalarySummary();
     });
 
     document.getElementById('next-month-btn')?.addEventListener('click', () => {
       this.currentDate.setMonth(this.currentDate.getMonth() + 1);
+      this.selectedDates.clear();
       this.renderCalendar();
       this.renderSalarySummary();
     });
 
     document.getElementById('today-btn')?.addEventListener('click', () => {
       this.currentDate = new Date();
+      this.selectedDates.clear();
       this.renderCalendar();
       this.renderSalarySummary();
     });
 
-    // 一括選択モードトグル
-    const multiToggle = document.getElementById('multi-select-toggle');
-    multiToggle?.addEventListener('change', (e) => {
-      this.multiSelectMode = e.target.checked;
-      if (!this.multiSelectMode) {
-        this.selectedDates.clear();
-      }
-      this.renderCalendar();
+    // 選択クリアボタン
+    document.getElementById('btn-clear-selection')?.addEventListener('click', () => {
+      this.clearSelection();
     });
 
-    // 定型テンプレートチップ
-    document.querySelectorAll('.chip-btn[data-template]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const templateKey = btn.getAttribute('data-template');
-        this.applyTemplate(templateKey);
-      });
+    // ドラッグ選択終了イベント
+    window.addEventListener('mouseup', () => {
+      this.finishDragSelection();
+    });
+    window.addEventListener('touchend', () => {
+      this.finishDragSelection();
     });
 
-    // FoodIT送信モーダル
-    document.getElementById('btn-open-foodit')?.addEventListener('click', () => {
+    // 「シフト希望申請」ボタン
+    document.getElementById('btn-open-shift-apply')?.addEventListener('click', () => {
       this.openFoodITSubmitModal();
     });
+
     document.getElementById('btn-close-foodit')?.addEventListener('click', () => {
       this.closeFoodITModal();
     });
+
     document.getElementById('btn-foodit-submit-all')?.addEventListener('click', () => {
-      this.submitAllMonthFoodIT();
+      this.submitSelectedFoodIT();
     });
 
-    // シフトモーダル
-    document.getElementById('btn-close-modal')?.addEventListener('click', () => {
-      this.closeShiftModal();
+    // テンプレート編集モーダル
+    document.getElementById('btn-close-template-modal')?.addEventListener('click', () => {
+      this.closeTemplateEditModal();
     });
-    document.getElementById('btn-save-shift')?.addEventListener('click', () => {
-      this.saveModalShift();
+    document.getElementById('btn-save-template')?.addEventListener('click', () => {
+      this.saveTemplateFromModal();
     });
-    document.getElementById('btn-delete-shift')?.addEventListener('click', () => {
-      this.deleteModalShift();
-    });
-    document.getElementById('modal-shift-type')?.addEventListener('change', (e) => {
-      this.toggleTimeInputsVisibility(e.target.value);
+    document.getElementById('btn-delete-template')?.addEventListener('click', () => {
+      this.deleteTemplateFromModal();
     });
 
-    // 確定シフトへのインポート
+    // 給与計算モード切替
+    document.querySelectorAll('.salary-mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.setSalaryMode(btn.dataset.mode);
+      });
+    });
+
+    // 確定シフトへの反映
     document.getElementById('btn-import-requested')?.addEventListener('click', () => {
       this.importRequestedToConfirmed();
     });
 
-    // 設定フォーム変更
+    // 設定保存
     const onSettingChange = () => {
       this.settings.storeCode = document.getElementById('setting-store-code').value.trim();
       this.settings.empCode = document.getElementById('setting-emp-code').value.trim();
       this.settings.regularWage = Number(document.getElementById('setting-regular-wage').value) || 1300;
       this.settings.nightWage = Number(document.getElementById('setting-night-wage').value) || 1625;
+      this.settings.makanaiDeduction = Number(document.getElementById('setting-makanai').value) || 320;
       this.updateParam();
       document.getElementById('setting-param-preview').textContent = `Param=${this.settings.param}`;
     };
 
-    ['setting-store-code', 'setting-emp-code', 'setting-regular-wage', 'setting-night-wage'].forEach(id => {
+    ['setting-store-code', 'setting-emp-code', 'setting-regular-wage', 'setting-night-wage', 'setting-makanai'].forEach(id => {
       document.getElementById(id)?.addEventListener('input', onSettingChange);
     });
 
@@ -738,6 +939,11 @@ class ShiftMasterApp {
 
     if (targetPane) targetPane.classList.add('active');
     if (targetNav) targetNav.classList.add('active');
+
+    // タブ切り替え時にカレンダー表示を更新
+    this.selectedDates.clear();
+    this.renderCalendar();
+    this.renderSalarySummary();
   }
 
   showToast(message) {
@@ -754,7 +960,7 @@ class ShiftMasterApp {
       toast.style.transform = 'translateY(10px)';
       toast.style.transition = 'all 0.3s ease';
       setTimeout(() => toast.remove(), 300);
-    }, 2800);
+    }, 2500);
   }
 
   formatDate(d) {
