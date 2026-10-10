@@ -6,7 +6,7 @@
 const FoodIT = {
   // FoodIT 基本エンドポイント
   BASE_URL: 'https://secure1.foodit.jp/CRG/mobile',
-  POST_ACTION_URL: 'https://secure1.foodit.jp/CRG/mobile/shift_8.asp?ProcFlg=App#tm4',
+  POST_ACTION_URL: 'https://secure1.foodit.jp/CRG/mobile/shift_8.asp?ProcFlg=App#tm1',
 
   /**
    * 指定した日付の「その週の月曜日」を YYYYMMDD 形式で取得 (hidStYMD用)
@@ -54,7 +54,7 @@ const FoodIT = {
     const ymd = `${year}${month}${day}`;
     const mondayYmd = this.getWeekMonday(dateObj);
 
-    // 時間のパース
+    // 時間のパース（取り消し時も18:00〜23:00等の時間指定がFoodITサーバーのバリデーション通過に必須）
     let stH = '18', stM = '00', edH = '23', edM = '00';
     if (shiftData.start && shiftData.start.includes(':')) {
       const parts = shiftData.start.split(':');
@@ -73,34 +73,36 @@ const FoodIT = {
     const params = {
       cmbSkkb: isPaidLeave ? '03|1' : '01|0', // 01|0: 出勤, 03|1: 有休
       cmbSagyo: settings.workKind || '01',    // 01: ホール
-      cmbStTimeH: (isPaidLeave || isDelete) ? '' : stH,
-      cmbStTimeM: (isPaidLeave || isDelete) ? '' : stM,
-      cmbEdTimeH: (isPaidLeave || isDelete) ? '' : edH,
-      cmbEdTimeM: (isPaidLeave || isDelete) ? '' : edM,
+      cmbStTimeH: isPaidLeave ? '' : stH,
+      cmbStTimeM: isPaidLeave ? '' : stM,
+      cmbEdTimeH: isPaidLeave ? '' : edH,
+      cmbEdTimeM: isPaidLeave ? '' : edM,
       cmbJikankb: '||',
       cmbStTimeH2: '',
       cmbStTimeM2: '',
       cmbEdTimeH2: '',
-      cmbEdTimeM2: '',
-      txtMemo: isDelete ? '' : (shiftData.memo || shiftData.name || ''),
-      hidKgcd: settings.kgcd || '0001',
-      hidLinkFlg: 'shiftTIME',
-      hidShiftYMD: ymd,
-      hidUdate: shiftData.udate || settings.lastUdate || this.formatUdate(),
-      hidStYMD: mondayYmd,
-      hidEndTM: isDelete ? '' : `${edH}${edM}`,
-      hidEndTM2: '',
-      hidMXSKCNT: '1',
-      hidSsnFlg: '2',
-      hidParam: settings.param || `${settings.storeCode}|${settings.empCode}`,
-      hidName: 'tm4',
-      hidWRKSTR: '3',
-      hidTMMAX: '3600'
+      cmbEdTimeM2: ''
     };
 
+    // 削除フラグ（FoodIT実機POSTに合わせて時間項目の直後に配置）
     if (isDelete) {
       params.chkDel = 'checked';
     }
+
+    params.txtMemo = isDelete ? '' : (shiftData.memo || shiftData.name || '');
+    params.hidKgcd = settings.kgcd || '0001';
+    params.hidLinkFlg = 'shiftTIME';
+    params.hidShiftYMD = ymd;
+    params.hidUdate = shiftData.udate || settings.lastUdate || this.formatUdate();
+    params.hidStYMD = mondayYmd;
+    params.hidEndTM = isPaidLeave ? '' : `${edH}${edM}`;
+    params.hidEndTM2 = '';
+    params.hidMXSKCNT = '1';
+    params.hidSsnFlg = '2';
+    params.hidParam = settings.param || `${settings.storeCode}|${settings.empCode}`;
+    params.hidName = 'tm1';
+    params.hidWRKSTR = '3';
+    params.hidTMMAX = '3600';
 
     return params;
   },
