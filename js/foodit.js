@@ -82,7 +82,7 @@ const FoodIT = {
       cmbStTimeM2: '',
       cmbEdTimeH2: '',
       cmbEdTimeM2: '',
-      txtMemo: shiftData.memo || '',
+      txtMemo: shiftData.memo || shiftData.name || '',
       hidKgcd: settings.kgcd || '0001',
       hidLinkFlg: 'shiftTIME',
       hidShiftYMD: ymd,

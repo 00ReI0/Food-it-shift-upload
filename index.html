@@ -61,7 +61,20 @@
               <span id="current-month-label" class="current-month-label">----年 --月</span>
               <button id="next-month-btn" class="nav-arrow-btn" aria-label="翌月">▶</button>
             </div>
-            <div style="display:flex;align-items:center;gap:4px;">
+            <!-- 一括選択トグルスイッチ -->
+            <div class="batch-toggle-wrapper">
+              <span id="batch-toggle-text" class="batch-toggle-text">一括選択: ON</span>
+              <label class="switch" title="一括選択（複数日）と個別入力を切り替えます">
+                <input type="checkbox" id="batch-select-toggle" checked>
+                <span class="slider round"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- 操作ガイドバー（ドラッグ選択・タップ選択） -->
+          <div class="selection-info-bar">
+            <span id="selection-hint" class="selection-hint">👆 タップで選択/解除、ドラッグで範囲選択</span>
+            <div id="selection-actions-wrapper" style="display:flex;align-items:center;gap:4px;">
               <span id="selected-count-badge" class="selected-count-badge" style="display:none;">0日選択中</span>
               <button id="btn-clear-selection" class="header-btn"
                 style="display:none;background:#f1f5f9;color:var(--c-primary);padding:3px 6px;font-size:0.7rem;">解除</button>
@@ -70,20 +83,15 @@
             </div>
           </div>
 
-          <!-- 操作ガイドバー（ドラッグ選択・タップ選択） -->
-          <div class="selection-info-bar">
-            <span class="selection-hint">👆 タップで選択/解除、ドラッグ（なぞり）で範囲選択</span>
-          </div>
-
-          <!-- カレンダーグリッド -->
+          <!-- カレンダーグリッド（日曜日始まり） -->
           <div id="calendar-grid" class="calendar-grid">
+            <div class="calendar-weekday sun">日</div>
             <div class="calendar-weekday">月</div>
             <div class="calendar-weekday">火</div>
             <div class="calendar-weekday">水</div>
             <div class="calendar-weekday">木</div>
             <div class="calendar-weekday">金</div>
             <div class="calendar-weekday sat">土</div>
-            <div class="calendar-weekday sun">日</div>
           </div>
         </div>
 
@@ -312,15 +320,67 @@
       </div>
     </div>
 
+    <!-- 個別シフト入力・編集モーダル（一括選択OFF時、および確定シフト修正時に使用） -->
+    <div id="single-shift-modal" class="modal-backdrop">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <div id="single-shift-modal-title" class="modal-title">日付 - シフト設定</div>
+          <button id="btn-close-single-shift" class="close-btn" aria-label="閉じる">×</button>
+        </div>
+
+        <!-- 定型プランからの反映ショートカット -->
+        <div class="form-group">
+          <label class="form-label">⚡ 登録プランから反映</label>
+          <div id="single-template-shortcuts" class="template-chips-container" style="gap:6px;"></div>
+        </div>
+
+        <!-- 勤務種別 -->
+        <div class="form-group">
+          <label class="form-label" for="single-shift-type">勤務種別</label>
+          <select id="single-shift-type" class="form-input">
+            <option value="01|0">通常出勤</option>
+            <option value="03|1">有給休暇</option>
+          </select>
+        </div>
+
+        <!-- 勤務時間帯 -->
+        <div id="single-shift-time-group" class="form-group">
+          <label class="form-label">勤務時間帯</label>
+          <div class="time-picker-grid">
+            <input type="time" id="single-shift-start" class="form-input" value="18:00">
+            <span style="font-weight:bold;color:var(--c-text-muted);text-align:center;">〜</span>
+            <input type="time" id="single-shift-end" class="form-input" value="23:00">
+          </div>
+        </div>
+
+        <!-- 件名 / シフト名 -->
+        <div class="form-group">
+          <label class="form-label" for="single-shift-name">件名 / シフト名</label>
+          <input type="text" id="single-shift-name" class="form-input" placeholder="例: プラン1、遅番、ホール">
+        </div>
+
+        <!-- コメント / メモ -->
+        <div class="form-group">
+          <label class="form-label" for="single-shift-memo">コメント (FoodIT送信メモ)</label>
+          <textarea id="single-shift-memo" class="form-input" rows="2" placeholder="例: ラストまで可、22時以降希望など"></textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button id="btn-delete-single-shift" class="btn-danger" style="display:none;">シフト削除</button>
+          <button id="btn-save-single-shift" class="btn-primary">保存する</button>
+        </div>
+      </div>
+    </div>
+
     <!-- シフト希望申請モーダルシート（選択した日だけを表示して一括送信） -->
     <div id="foodit-modal" class="modal-backdrop">
       <div class="modal-sheet">
         <div class="modal-header">
-          <div class="modal-title">シフト希望申請</div>
+          <div id="foodit-modal-title" class="modal-title">シフト希望申請</div>
           <button id="btn-close-foodit" class="close-btn" aria-label="閉じる">×</button>
         </div>
 
-        <p style="font-size:0.8rem;color:var(--c-text-muted);">
+        <p id="foodit-modal-desc" style="font-size:0.8rem;color:var(--c-text-muted);">
           選択した日程のシフトをFoodITへ送信します。
         </p>
 

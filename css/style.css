@@ -227,6 +227,76 @@ body {
 }
 
 /* 選択操作インフォバー */
+/* 一括選択トグルスイッチ */
+.batch-toggle-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f1f5f9;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--c-border);
+}
+
+.batch-toggle-text {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--c-primary);
+  user-select: none;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #cbd5e1;
+  transition: .2s ease;
+}
+
+.slider.round {
+  border-radius: 20px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .2s ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+}
+
+input:checked + .slider {
+  background-color: var(--c-gold);
+}
+
+input:checked + .slider:before {
+  transform: translateX(16px);
+}
+
 .selection-info-bar {
   background: var(--c-gold-bg);
   border: 1px solid rgba(198, 143, 35, 0.3);
@@ -329,10 +399,17 @@ body {
   box-shadow: 0 0 0 1px rgba(198, 143, 35, 0.3);
 }
 
-/* ドラッグ中の仮選択状態 */
+/* ドラッグ中の仮選択状態（選択追加） */
 .calendar-day.drag-selecting {
   background: #fef0cd !important;
   border: 2px dashed var(--c-gold) !important;
+}
+
+/* ドラッグ中の仮選択解除状態（選択解除） */
+.calendar-day.drag-deselecting {
+  background: #fee2e2 !important;
+  border: 2px dashed #dc2626 !important;
+  opacity: 0.75;
 }
 
 .day-header {
@@ -767,6 +844,21 @@ body {
 .confirmed-pay-hours {
   font-size: 0.68rem;
   color: var(--c-text-muted);
+}
+
+.confirmed-badge {
+  font-size: 0.68rem;
+  background: var(--c-primary-container);
+  color: var(--c-primary);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  font-weight: 700;
+}
+
+.confirmed-memo {
+  font-size: 0.68rem;
+  color: var(--c-text-muted);
+  margin-top: 2px;
 }
 
 /* ============================================================
