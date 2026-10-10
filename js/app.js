@@ -53,7 +53,8 @@ class ShiftMasterApp {
       regularWage: 1300,
       nightWage: 1625,
       makanaiDeduction: 320, // 賄い控除 320円
-      workKind: '01'
+      workKind: '01',
+      calendarEventTitle: 'れい　バイト'
     };
 
     const saved = localStorage.getItem('shift_master_settings');
@@ -161,11 +162,13 @@ class ShiftMasterApp {
 
   deleteSelectedShifts() {
     if (this.selectedDates.size === 0) {
-      this.showToast('プランを削除したい日付を選択してください');
+      this.showToast('削除したい日付を選択してください');
       return;
     }
 
-    const targetStore = (this.activeTab === 'tab-confirmed') ? this.confirmedShifts : this.requestedShifts;
+    const isConfirmed = (this.activeTab === 'tab-confirmed');
+    const targetStore = isConfirmed ? this.confirmedShifts : this.requestedShifts;
+    const targetName = isConfirmed ? '確定シフト' : '希望シフト';
     let count = 0;
     this.selectedDates.forEach(dateStr => {
       if (targetStore[dateStr]) {
@@ -175,18 +178,19 @@ class ShiftMasterApp {
     });
 
     if (count > 0) {
-      if (this.activeTab === 'tab-confirmed') {
+      if (isConfirmed) {
         this.saveConfirmedShifts();
       } else {
         this.saveRequestedShifts();
       }
-      this.showToast(`${count}日分のプランを削除しました`);
+      this.showToast(`${count}日分の${targetName}を削除しました`);
     } else {
-      this.showToast('選択した日付にプランはありませんでした');
+      this.showToast('選択した日付にシフトはありませんでした');
     }
 
     this.selectedDates.clear();
     this.renderCalendar();
+    this.renderSalarySummary();
   }
 
   openTemplateEditModal(templateId) {
@@ -498,10 +502,10 @@ class ShiftMasterApp {
       cell.appendChild(timeSub);
     }
 
-    // マウスドラッグ操作（一括選択モード中かつ希望シフト画面のみ）
+    // マウスドラッグ操作（一括選択モード中のみ）
     cell.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
-      if (!this.isBatchMode || this.activeTab === 'tab-confirmed') {
+      if (!this.isBatchMode) {
         return;
       }
       this.isPointerDown = true;
@@ -523,7 +527,7 @@ class ShiftMasterApp {
 
     // タッチ操作（スマホでのドラッグ範囲選択対応）
     cell.addEventListener('touchstart', (e) => {
-      if (!this.isBatchMode || this.activeTab === 'tab-confirmed') {
+      if (!this.isBatchMode) {
         return;
       }
       this.isPointerDown = true;
@@ -628,20 +632,18 @@ class ShiftMasterApp {
   }
 
   handleCellAction(dateStr) {
+    if (this.isBatchMode) {
+      // 一括選択ON時：希望シフトでも確定シフトでもタップで選択/解除トグル
+      this.handleCellToggleClick(dateStr);
+      return;
+    }
+
     if (this.activeTab === 'tab-confirmed') {
-      // ★要件1: 確定シフト画面では日付タップで個別に修正モーダルを開く
+      // 一括選択OFF時：個別編集
       this.openSingleShiftEditModal(dateStr, 'confirmed');
-      return;
-    }
-
-    if (!this.isBatchMode) {
-      // ★要件2: 一括選択OFF時、日付タップで個別に時間・件名・コメント入力モーダルを開く
+    } else {
       this.openSingleShiftEditModal(dateStr, 'requested');
-      return;
     }
-
-    // 一括選択ON時：タップで選択/解除
-    this.handleCellToggleClick(dateStr);
   }
 
   handleCellToggleClick(dateStr) {
@@ -654,9 +656,7 @@ class ShiftMasterApp {
   }
 
   updateSelectionInfo() {
-    const badge = document.getElementById('selected-count-badge');
-    const clearBtn = document.getElementById('btn-clear-selection');
-    const deleteBtn = document.getElementById('btn-delete-selected-shifts');
+    const actionsWrapper = document.getElementById('selection-actions-wrapper');
     const hint = document.getElementById('selection-hint');
     const toggleText = document.getElementById('batch-toggle-text');
     const toggleInput = document.getElementById('batch-select-toggle');
@@ -670,43 +670,45 @@ class ShiftMasterApp {
       toggleText.textContent = this.isBatchMode ? '一括選択: ON' : '一括選択: OFF';
     }
 
+    if (batchWrapper) batchWrapper.style.display = 'flex';
+
+    const hasSelection = this.selectedDates.size > 0;
+    if (actionsWrapper) {
+      actionsWrapper.style.display = hasSelection ? 'flex' : 'none';
+    }
+
+    const deleteBtn = document.getElementById('btn-delete-selected-shifts');
+
     if (this.activeTab === 'tab-confirmed') {
-      if (batchWrapper) batchWrapper.style.display = 'none';
       if (templatesSec) templatesSec.style.display = 'none';
-      if (hint) hint.textContent = '👆 日付または下の一覧から確定シフトを修正・削除できます';
-      if (badge) badge.style.display = 'none';
-      if (clearBtn) clearBtn.style.display = 'none';
-      if (deleteBtn) deleteBtn.style.display = 'none';
+      if (deleteBtn) deleteBtn.innerHTML = '🗑️ シフト削除';
+
+      if (this.isBatchMode) {
+        if (hint) {
+          hint.textContent = hasSelection 
+            ? '👆 選択した日程を「シフト削除」で一括削除できます' 
+            : '👆 日付を選択して「シフト削除」で一括削除';
+        }
+      } else {
+        if (hint) hint.textContent = '👆 日付または下の一覧から確定シフトを個別に修正・削除';
+      }
       return;
     }
 
-    if (batchWrapper) batchWrapper.style.display = 'flex';
+    // 希望シフト画面
     if (templatesSec) templatesSec.style.display = 'flex';
+    if (deleteBtn) deleteBtn.innerHTML = '🗑️ プラン削除';
 
     if (!this.isBatchMode) {
       if (hint) hint.textContent = '👆 日付をタップして個別に時間・件名・コメントを入力';
-      if (badge) badge.style.display = 'none';
-      if (clearBtn) clearBtn.style.display = 'none';
-      if (deleteBtn) deleteBtn.style.display = 'none';
       return;
     }
 
-    // 一括選択モード
-    const hasSelection = this.selectedDates.size > 0;
+    // 希望シフトの一括選択モード
     if (hint) {
       hint.textContent = hasSelection 
         ? '👆 タップで選択/解除、ドラッグで範囲選択（下のプランで一括登録）'
         : '👆 タップで複数選択、ドラッグで範囲選択';
-    }
-    if (badge) {
-      badge.textContent = `${this.selectedDates.size}日選択中`;
-      badge.style.display = hasSelection ? 'inline-block' : 'none';
-    }
-    if (clearBtn) {
-      clearBtn.style.display = hasSelection ? 'inline-block' : 'none';
-    }
-    if (deleteBtn) {
-      deleteBtn.style.display = hasSelection ? 'inline-block' : 'none';
     }
   }
 
@@ -1160,6 +1162,7 @@ class ShiftMasterApp {
     const regWageInput = document.getElementById('setting-regular-wage');
     const nightWageInput = document.getElementById('setting-night-wage');
     const makanaiInput = document.getElementById('setting-makanai');
+    const calTitleInput = document.getElementById('setting-calendar-title');
 
     if (storeInput) storeInput.value = this.settings.storeCode || '';
     if (empInput) empInput.value = this.settings.empCode || '';
@@ -1167,6 +1170,7 @@ class ShiftMasterApp {
     if (regWageInput) regWageInput.value = this.settings.regularWage || 1300;
     if (nightWageInput) nightWageInput.value = this.settings.nightWage || 1625;
     if (makanaiInput) makanaiInput.value = this.settings.makanaiDeduction || 320;
+    if (calTitleInput) calTitleInput.value = this.settings.calendarEventTitle || 'れい　バイト';
 
     this.renderTemplateSettingsList();
   }
@@ -1189,6 +1193,173 @@ class ShiftMasterApp {
       `;
       list.appendChild(item);
     });
+  }
+
+  // ============================================================
+  // Googleカレンダー連携 (.ics)
+  // ============================================================
+  openCalendarExportModal() {
+    const shiftsToExport = this.getConfirmedShiftsForExport();
+    if (shiftsToExport.length === 0) {
+      this.showToast('エクスポート対象の確定シフトがありません');
+      return;
+    }
+
+    const modal = document.getElementById('calendar-export-modal');
+    const titleInput = document.getElementById('export-event-title');
+    const scopeDesc = document.getElementById('export-scope-desc');
+
+    if (titleInput) {
+      titleInput.value = this.settings.calendarEventTitle || 'れい　バイト';
+    }
+
+    if (scopeDesc) {
+      if (this.selectedDates.size > 0) {
+        scopeDesc.textContent = `選択中の日程から確定シフト ${shiftsToExport.length} 件`;
+      } else {
+        const year = this.currentDate.getFullYear();
+        const month = this.currentDate.getMonth() + 1;
+        scopeDesc.textContent = `${year}年${month}月の確定シフト全件 (${shiftsToExport.length} 件)`;
+      }
+    }
+
+    if (modal) modal.classList.add('active');
+  }
+
+  closeCalendarExportModal() {
+    const modal = document.getElementById('calendar-export-modal');
+    if (modal) modal.classList.remove('active');
+  }
+
+  getConfirmedShiftsForExport() {
+    const list = [];
+    if (this.selectedDates.size > 0) {
+      // 選択中の日付のみ
+      const sortedDates = Array.from(this.selectedDates).sort();
+      sortedDates.forEach(dateStr => {
+        if (this.confirmedShifts[dateStr]) {
+          list.push({ date: dateStr, shift: this.confirmedShifts[dateStr] });
+        }
+      });
+    } else {
+      // 現在表示中の月の確定シフト全件
+      const year = this.currentDate.getFullYear();
+      const month = String(this.currentDate.getMonth() + 1).padStart(2, '0');
+      const prefix = `${year}-${month}`;
+
+      const dates = Object.keys(this.confirmedShifts)
+        .filter(d => d.startsWith(prefix))
+        .sort();
+
+      dates.forEach(d => {
+        list.push({ date: d, shift: this.confirmedShifts[d] });
+      });
+    }
+    return list;
+  }
+
+  exportConfirmedShiftsToICS() {
+    const shiftsToExport = this.getConfirmedShiftsForExport();
+    if (shiftsToExport.length === 0) {
+      this.showToast('エクスポート対象の確定シフトがありません');
+      return;
+    }
+
+    const titleInput = document.getElementById('export-event-title');
+    const eventTitle = titleInput?.value.trim() || this.settings.calendarEventTitle || 'れい　バイト';
+
+    if (eventTitle !== this.settings.calendarEventTitle) {
+      this.settings.calendarEventTitle = eventTitle;
+      this.saveSettings();
+    }
+
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const dtstamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`;
+
+    const icsLines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Shift Master//FoodIT Shift Exporter//JA',
+      'CALSCALE:GREGORIAN',
+      'METHOD:PUBLISH',
+      'X-WR-CALNAME:' + eventTitle,
+      'X-WR-TIMEZONE:Asia/Tokyo',
+      'BEGIN:VTIMEZONE',
+      'TZID:Asia/Tokyo',
+      'BEGIN:STANDARD',
+      'DTSTART:19700101T000000',
+      'TZOFFSETFROM:+0900',
+      'TZOFFSETTO:+0900',
+      'TZNAME:JST',
+      'END:STANDARD',
+      'END:VTIMEZONE'
+    ];
+
+    shiftsToExport.forEach((item, index) => {
+      const { date, shift } = item;
+      const [yStr, mStr, dStr] = date.split('-');
+      const y = parseInt(yStr, 10);
+      const m = parseInt(mStr, 10);
+      const d = parseInt(dStr, 10);
+
+      const startParts = (shift.start || '10:00').split(':');
+      const startH = parseInt(startParts[0] || '10', 10);
+      const startM = parseInt(startParts[1] || '0', 10);
+
+      const endParts = (shift.end || '17:00').split(':');
+      const endH = parseInt(endParts[0] || '17', 10);
+      const endM = parseInt(endParts[1] || '0', 10);
+
+      const startDate = new Date(y, m - 1, d, startH, startM, 0);
+      let endDate;
+      if (endH >= 24) {
+        endDate = new Date(y, m - 1, d + 1, endH - 24, endM, 0);
+      } else {
+        endDate = new Date(y, m - 1, d, endH, endM, 0);
+        if (endDate <= startDate) {
+          endDate.setDate(endDate.getDate() + 1);
+        }
+      }
+
+      const formatDT = (dt) => {
+        return `${dt.getFullYear()}${pad(dt.getMonth() + 1)}${pad(dt.getDate())}T${pad(dt.getHours())}${pad(dt.getMinutes())}00`;
+      };
+
+      const dtStartStr = formatDT(startDate);
+      const dtEndStr = formatDT(endDate);
+      const uid = `shift-${date}-${index}-${now.getTime()}@shiftmaster.local`;
+      const description = `${shift.name || ''} (${shift.start}〜${shift.end}) ${shift.memo || ''}`.trim();
+
+      icsLines.push('BEGIN:VEVENT');
+      icsLines.push(`UID:${uid}`);
+      icsLines.push(`DTSTAMP:${dtstamp}`);
+      icsLines.push(`DTSTART;TZID=Asia/Tokyo:${dtStartStr}`);
+      icsLines.push(`DTEND;TZID=Asia/Tokyo:${dtEndStr}`);
+      icsLines.push(`SUMMARY:${eventTitle}`);
+      if (description) {
+        icsLines.push(`DESCRIPTION:${description}`);
+      }
+      icsLines.push('STATUS:CONFIRMED');
+      icsLines.push('END:VEVENT');
+    });
+
+    icsLines.push('END:VCALENDAR');
+
+    const icsContent = icsLines.join('\r\n');
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const fileSuffix = this.selectedDates.size > 0 ? 'selected' : `${this.currentDate.getFullYear()}${pad(this.currentDate.getMonth() + 1)}`;
+    link.setAttribute('download', `${eventTitle}_${fileSuffix}.ics`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    this.closeCalendarExportModal();
+    this.showToast(`確定シフト ${shiftsToExport.length} 件をカレンダーファイル(.ics)として出力しました！`);
   }
 
   // ============================================================
@@ -1256,6 +1427,17 @@ class ShiftMasterApp {
       this.submitSelectedFoodIT();
     });
 
+    // Googleカレンダー出力モーダル
+    document.getElementById('btn-open-calendar-export')?.addEventListener('click', () => {
+      this.openCalendarExportModal();
+    });
+    document.getElementById('btn-close-calendar-modal')?.addEventListener('click', () => {
+      this.closeCalendarExportModal();
+    });
+    document.getElementById('btn-do-export-ics')?.addEventListener('click', () => {
+      this.exportConfirmedShiftsToICS();
+    });
+
     // テンプレート編集モーダル
     document.getElementById('btn-close-template-modal')?.addEventListener('click', () => {
       this.closeTemplateEditModal();
@@ -1306,11 +1488,12 @@ class ShiftMasterApp {
       this.settings.regularWage = Number(document.getElementById('setting-regular-wage').value) || 1300;
       this.settings.nightWage = Number(document.getElementById('setting-night-wage').value) || 1625;
       this.settings.makanaiDeduction = Number(document.getElementById('setting-makanai').value) || 320;
+      this.settings.calendarEventTitle = document.getElementById('setting-calendar-title')?.value.trim() || 'れい　バイト';
       this.updateParam();
       document.getElementById('setting-param-preview').textContent = `Param=${this.settings.param}`;
     };
 
-    ['setting-store-code', 'setting-emp-code', 'setting-regular-wage', 'setting-night-wage', 'setting-makanai'].forEach(id => {
+    ['setting-store-code', 'setting-emp-code', 'setting-regular-wage', 'setting-night-wage', 'setting-makanai', 'setting-calendar-title'].forEach(id => {
       document.getElementById(id)?.addEventListener('input', onSettingChange);
     });
 

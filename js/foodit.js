@@ -108,20 +108,30 @@ const FoodIT = {
   /**
    * モード1: ブラウザ直接フォーム送信（推奨）
    * 動的フォームを生成して FoodIT サーバーへ直接 POST。
-   * CORS制約を受けず、ブラウザのCookie（セッション）がそのまま送信されます。
+   * 非表示のバックグラウンド iframe へ送信することで、画面遷移や別タブ表示を行わずに裏でサイレントにPOSTリクエストを送ります。
    */
-  submitDirectForm(dateStr, shiftData, settings, openInNewTab = true) {
+  submitDirectForm(dateStr, shiftData, settings, silent = true) {
     const params = this.buildParams(dateStr, shiftData, settings);
 
     // 既存の送信フォームがあれば削除
     const oldForm = document.getElementById('foodit-post-form');
     if (oldForm) oldForm.remove();
 
+    // バックグラウンド送信用の非表示 iframe を用意
+    let iframe = document.getElementById('foodit-silent-frame');
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'foodit-silent-frame';
+      iframe.name = 'foodit-silent-frame';
+      iframe.style.display = 'none';
+      document.body.appendChild(iframe);
+    }
+
     const form = document.createElement('form');
     form.id = 'foodit-post-form';
     form.method = 'POST';
     form.action = this.POST_ACTION_URL;
-    form.target = openInNewTab ? '_blank' : '_self';
+    form.target = silent ? 'foodit-silent-frame' : '_blank';
     form.style.display = 'none';
 
     for (const [key, value] of Object.entries(params)) {
@@ -139,7 +149,7 @@ const FoodIT = {
 
     return {
       success: true,
-      message: `${dateStr} のシフトをFoodITへ送信しました（別タブで送信完了画面が開きます）。`,
+      message: `${dateStr} のシフトをFoodITへ送信しました。`,
       params
     };
   },

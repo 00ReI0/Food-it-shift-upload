@@ -74,12 +74,9 @@
           <!-- 操作ガイドバー（ドラッグ選択・タップ選択） -->
           <div class="selection-info-bar">
             <span id="selection-hint" class="selection-hint">👆 タップで選択/解除、ドラッグで範囲選択</span>
-            <div id="selection-actions-wrapper" style="display:flex;align-items:center;gap:4px;">
-              <span id="selected-count-badge" class="selected-count-badge" style="display:none;">0日選択中</span>
-              <button id="btn-clear-selection" class="header-btn"
-                style="display:none;background:#f1f5f9;color:var(--c-primary);padding:3px 6px;font-size:0.7rem;">解除</button>
-              <button id="btn-delete-selected-shifts" class="header-btn"
-                style="display:none;background:#fee2e2;color:#dc2626;border:1px solid #f87171;padding:3px 6px;font-size:0.7rem;font-weight:bold;">🗑️プラン削除</button>
+            <div id="selection-actions-wrapper" class="selection-actions-wrapper" style="display:none;">
+              <button id="btn-clear-selection" class="btn-selection-action btn-clear-selection">解除</button>
+              <button id="btn-delete-selected-shifts" class="btn-selection-action btn-delete-selection">🗑️ プラン削除</button>
             </div>
           </div>
 
@@ -189,9 +186,14 @@
 
         <!-- 確定シフト専用アクション -->
         <div class="confirmed-actions">
-          <button id="btn-import-requested" class="btn-secondary">
-            <span>📥 希望シフトから確定へ一括反映</span>
-          </button>
+          <div style="display:flex;gap:8px;width:100%;">
+            <button id="btn-import-requested" class="btn-secondary" style="flex:1;">
+              <span>📥 希望から確定へ反映</span>
+            </button>
+            <button id="btn-open-calendar-export" class="btn-primary" style="flex:1;background:#1a73e8;display:flex;align-items:center;justify-content:center;gap:6px;">
+              <span>📅 カレンダー出力</span>
+            </button>
+          </div>
         </div>
 
         <!-- シフト明細一覧 -->
@@ -219,10 +221,10 @@
           <div id="template-manage-list" class="template-manage-list"></div>
         </div>
 
-        <!-- 給与計算レート設定 -->
+        <!-- 給与計算レート・カレンダー設定 -->
         <div class="settings-card">
           <div class="section-title">
-            <span>💴 給与・控除設定</span>
+            <span>💴 給与・カレンダー設定</span>
           </div>
 
           <div class="form-group">
@@ -238,6 +240,12 @@
           <div class="form-group">
             <label class="form-label" for="setting-makanai">賄い代 (1勤務あたり控除額)</label>
             <input type="number" id="setting-makanai" class="form-input" value="320">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="setting-calendar-title">Googleカレンダー予定名</label>
+            <input type="text" id="setting-calendar-title" class="form-input" value="れい　バイト" placeholder="例: れい　バイト">
+            <span class="form-desc">※エクスポート時の件名（デフォルト: れい　バイト）</span>
           </div>
         </div>
 
@@ -368,6 +376,39 @@
         <div class="modal-actions">
           <button id="btn-delete-single-shift" class="btn-danger" style="display:none;">シフト削除</button>
           <button id="btn-save-single-shift" class="btn-primary">保存する</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Googleカレンダー(.ics)出力モーダル -->
+    <div id="calendar-export-modal" class="modal-backdrop">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <div class="modal-title">📅 Googleカレンダー連携 (.ics)</div>
+          <button id="btn-close-calendar-modal" class="close-btn" aria-label="閉じる">×</button>
+        </div>
+
+        <p style="font-size:0.8rem;color:var(--c-text-muted);">
+          確定シフトをカレンダーファイル（.ics）として書き出します。<br>
+          スマホならダウンロード後に開くだけでGoogleカレンダー等へ一括追加できます。
+        </p>
+
+        <div class="form-group">
+          <label class="form-label" for="export-event-title">登録する予定名（件名）</label>
+          <input type="text" id="export-event-title" class="form-input" value="れい　バイト">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">エクスポート対象</label>
+          <div id="export-scope-desc" style="font-size:0.85rem;font-weight:700;color:var(--c-primary);padding:10px 14px;background:#f1f5f9;border-radius:var(--radius-md);">
+            今月の確定シフト全件（0件）
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button id="btn-do-export-ics" class="btn-primary" style="background:#1a73e8;">
+            <span>📥 カレンダーファイル(.ics)をダウンロード</span>
+          </button>
         </div>
       </div>
     </div>
