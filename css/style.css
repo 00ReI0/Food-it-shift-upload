@@ -106,6 +106,7 @@ body {
   letter-spacing: 0.03em;
   background: linear-gradient(90deg, #ffffff 0%, var(--c-gold-light) 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -144,16 +145,20 @@ body {
 /* メインコンテンツ */
 .main-content {
   flex: 1;
-  padding: 16px;
+  padding: 12px 8px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .tab-pane {
   display: none;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
+  width: 100%;
+  box-sizing: border-box;
   animation: fadeIn 0.25s ease-out;
 }
 
@@ -166,24 +171,26 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ============================================================
-   カレンダー共通コンポーネント (ドラッグ選択対応)
-   ============================================================ */
-
+/* カレンダー共通コンポーネント (サイズ完全固定・はみ出し防止) */
 .calendar-card {
   background: var(--c-surface);
   border-radius: var(--radius-lg);
-  padding: 16px;
+  padding: 10px 4px;
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--c-border);
   user-select: none;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .calendar-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
+  padding: 0 4px;
 }
 
 .month-nav {
@@ -193,8 +200,8 @@ body {
 }
 
 .nav-arrow-btn {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-full);
   border: 1px solid var(--c-border);
   background: var(--c-surface);
@@ -211,10 +218,10 @@ body {
 }
 
 .current-month-label {
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--c-primary);
-  min-width: 110px;
+  min-width: 100px;
   text-align: center;
   font-family: var(--font-en), var(--font-base);
 }
@@ -223,13 +230,13 @@ body {
 .selection-info-bar {
   background: var(--c-gold-bg);
   border: 1px solid rgba(198, 143, 35, 0.3);
-  padding: 8px 12px;
+  padding: 5px 8px;
   border-radius: var(--radius-md);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
-  font-size: 0.78rem;
+  margin-bottom: 6px;
+  font-size: 0.72rem;
   font-weight: 600;
   color: #795200;
 }
@@ -237,50 +244,62 @@ body {
 .selection-hint {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
 }
 
 .selected-count-badge {
   background: var(--c-gold);
   color: #ffffff;
-  padding: 3px 8px;
+  padding: 2px 6px;
   border-radius: var(--radius-full);
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 700;
 }
 
-/* カレンダーグリッド */
+/* カレンダーグリッド（7列均等・絶対に横スクロールさせない） */
 .calendar-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
+  display: grid !important;
+  grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+  gap: 2px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
   touch-action: pan-y;
 }
 
 .calendar-weekday {
   text-align: center;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 700;
   color: var(--c-text-muted);
-  padding: 6px 0;
+  padding: 2px 0;
+  overflow: hidden;
 }
 .calendar-weekday.sat { color: #1976d2; }
 .calendar-weekday.sun { color: #d32f2f; }
 
+/* 日付セグメント（サイズ完全固定52px・枠押し広げ防止） */
 .calendar-day {
-  min-height: 58px;
+  min-width: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: 52px !important;
+  min-height: 52px !important;
+  max-height: 52px !important;
+  box-sizing: border-box !important;
   background: #fbfcfd;
   border: 1px solid var(--c-border);
   border-radius: var(--radius-sm);
-  padding: 4px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  align-items: stretch;
+  padding: 2px 1px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+  align-items: stretch !important;
   cursor: pointer;
   position: relative;
   transition: background 0.1s ease, border-color 0.1s ease;
   user-select: none;
+  overflow: hidden !important;
 }
 
 .calendar-day:hover {
@@ -320,40 +339,55 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2px;
+  margin-bottom: 0px;
+  line-height: 1;
+  width: 100%;
+  overflow: hidden;
 }
 
 .day-num {
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-size: 0.68rem;
+  font-weight: 700;
   color: var(--c-text-main);
   font-family: var(--font-en), var(--font-base);
+  line-height: 1;
+  padding: 0 1px;
 }
 
 .calendar-day.sat .day-num { color: #1976d2; }
 .calendar-day.sun .day-num { color: #d32f2f; }
 
-/* 日付セル内のシフトバッジ */
+/* 日付セル内のシフトバッジ（極小固定フォント・省略表示・枠を押し広げない） */
 .shift-tag {
-  font-size: 0.65rem;
-  padding: 2px 3px;
-  border-radius: 4px;
-  text-align: center;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-top: 2px;
-  line-height: 1.2;
+  display: block !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  font-size: 0.52rem !important;
+  padding: 1px 1px !important;
+  border-radius: 2px !important;
+  text-align: center !important;
+  font-weight: 700;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  margin-top: 1px !important;
+  line-height: 1.1 !important;
   color: #ffffff;
 }
 
 .shift-time-sub {
-  font-size: 0.58rem;
+  display: block !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  font-size: 0.46rem !important;
   color: var(--c-text-muted);
-  text-align: center;
+  text-align: center !important;
   font-family: var(--font-en);
-  margin-top: 1px;
+  margin-top: 1px !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
 /* ============================================================
@@ -363,12 +397,12 @@ body {
 .templates-section {
   background: var(--c-surface);
   border-radius: var(--radius-lg);
-  padding: 16px;
+  padding: 14px 12px;
   border: 1px solid var(--c-border);
   box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .section-title-row {
@@ -378,7 +412,7 @@ body {
 }
 
 .section-title {
-  font-size: 0.88rem;
+  font-size: 0.85rem;
   font-weight: 700;
   color: var(--c-primary);
   display: flex;
@@ -389,7 +423,7 @@ body {
 .template-chips-container {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
 }
 
@@ -397,13 +431,13 @@ body {
   border: 1px solid var(--c-border);
   background: var(--c-surface);
   color: var(--c-text-main);
-  padding: 7px 12px;
+  padding: 6px 10px;
   border-radius: var(--radius-full);
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   cursor: pointer;
   transition: all 0.15s ease;
   box-shadow: var(--shadow-sm);
@@ -415,8 +449,8 @@ body {
 }
 
 .chip-color-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   display: inline-block;
 }
@@ -425,9 +459,9 @@ body {
   background: var(--c-primary-container);
   color: var(--c-primary);
   border: 1px dashed var(--c-primary);
-  padding: 6px 12px;
+  padding: 5px 10px;
   border-radius: var(--radius-full);
-  font-size: 0.76rem;
+  font-size: 0.74rem;
   font-weight: 700;
   cursor: pointer;
   display: inline-flex;
@@ -437,6 +471,25 @@ body {
 
 .chip-add-btn:hover {
   background: #dbe5f5;
+}
+
+.chip-delete-btn {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px dashed #f87171;
+  padding: 5px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.chip-delete-btn:hover {
+  background: #fee2e2;
 }
 
 /* ============================================================
@@ -560,6 +613,7 @@ body {
   letter-spacing: -0.02em;
   background: linear-gradient(90deg, #ffffff 0%, #ffe259 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 12px;
 }

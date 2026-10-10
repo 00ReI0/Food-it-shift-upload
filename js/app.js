@@ -108,6 +108,46 @@ class ShiftMasterApp {
       this.openTemplateEditModal(null);
     });
     container.appendChild(addBtn);
+
+    // 「🗑️ プラン削除」ボタン
+    const delBtn = document.createElement('button');
+    delBtn.className = 'chip-delete-btn';
+    delBtn.innerHTML = '<span>🗑️ プラン削除</span>';
+    delBtn.title = '選択した日のプランを削除します';
+    delBtn.addEventListener('click', () => {
+      this.deleteSelectedShifts();
+    });
+    container.appendChild(delBtn);
+  }
+
+  deleteSelectedShifts() {
+    if (this.selectedDates.size === 0) {
+      this.showToast('プランを削除したい日付を選択してください');
+      return;
+    }
+
+    const targetStore = (this.activeTab === 'tab-confirmed') ? this.confirmedShifts : this.requestedShifts;
+    let count = 0;
+    this.selectedDates.forEach(dateStr => {
+      if (targetStore[dateStr]) {
+        delete targetStore[dateStr];
+        count++;
+      }
+    });
+
+    if (count > 0) {
+      if (this.activeTab === 'tab-confirmed') {
+        this.saveConfirmedShifts();
+      } else {
+        this.saveRequestedShifts();
+      }
+      this.showToast(`${count}日分のプランを削除しました`);
+    } else {
+      this.showToast('選択した日付にプランはありませんでした');
+    }
+
+    this.selectedDates.clear();
+    this.renderCalendar();
   }
 
   openTemplateEditModal(templateId) {
@@ -413,44 +453,53 @@ class ShiftMasterApp {
       cell.appendChild(timeSub);
     }
 
-    // マウスドラッグ操作（範囲選択）
+    // マウスドラッグ & タップ操作
     cell.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      this.isDragging = true;
+      if (e.button !== 0) return; // 左クリックのみ
+      this.isPointerDown = true;
+      this.isTouchMode = false;
+      this.hasMovedRange = false;
       this.dragStartDate = dateStr;
       this.dragTargetDates = new Set([dateStr]);
-      this.highlightDragRange(dateStr, dateStr);
     });
 
     cell.addEventListener('mouseenter', () => {
-      if (this.isDragging && this.dragStartDate) {
-        this.highlightDragRange(this.dragStartDate, dateStr);
+      if (this.isPointerDown && this.dragStartDate) {
+        if (dateStr !== this.dragStartDate) {
+          this.hasMovedRange = true; // 別のセルに移動したのでドラッグ範囲選択を開始
+          this.highlightDragRange(this.dragStartDate, dateStr);
+        }
       }
     });
 
     // タッチ操作（スマホでのドラッグ範囲選択対応）
     cell.addEventListener('touchstart', (e) => {
-      this.isDragging = true;
+      this.isPointerDown = true;
+      this.isTouchMode = true;
+      this.hasMovedRange = false;
       this.dragStartDate = dateStr;
       this.dragTargetDates = new Set([dateStr]);
-      this.highlightDragRange(dateStr, dateStr);
     }, { passive: true });
 
     cell.addEventListener('touchmove', (e) => {
-      if (!this.isDragging || !this.dragStartDate) return;
+      if (!this.isPointerDown || !this.dragStartDate) return;
       const touch = e.touches[0];
       const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
       const dayElement = targetElement?.closest('.calendar-day');
       if (dayElement && dayElement.dataset.date) {
-        this.highlightDragRange(this.dragStartDate, dayElement.dataset.date);
+        const hoverDate = dayElement.dataset.date;
+        if (hoverDate !== this.dragStartDate) {
+          this.hasMovedRange = true; // 別のセルに移動したのでドラッグ範囲選択を開始
+          this.highlightDragRange(this.dragStartDate, hoverDate);
+        }
       }
     }, { passive: true });
 
-    // クリック（単一選択/モーダル）
+    // クリック（PCマウスクリック時のトグル）
     cell.addEventListener('click', (e) => {
-      if (!this.dragTriggered) {
-        this.handleCellSingleClick(dateStr);
-      }
+      // ドラッグ終了直後やスマホタッチ直後の二重クリックを防止
+      if (this.hasMovedRange || this.justTouched) return;
+      this.handleCellToggleClick(dateStr);
     });
 
     return cell;
@@ -458,7 +507,6 @@ class ShiftMasterApp {
 
   // ドラッグ範囲の計算とハイライト
   highlightDragRange(startStr, endStr) {
-    this.dragTriggered = true;
     const start = new Date(startStr);
     const end = new Date(endStr);
     const minDate = start <= end ? start : end;
@@ -483,26 +531,41 @@ class ShiftMasterApp {
   }
 
   finishDragSelection() {
-    if (!this.isDragging) return;
-    this.isDragging = false;
+    if (!this.isPointerDown) return;
+    this.isPointerDown = false;
 
-    if (this.dragTargetDates.size > 0) {
-      // ドラッグした範囲を選択リストに追加
+    // 別のセルまでドラッグして範囲選択した場合
+    if (this.hasMovedRange && this.dragTargetDates.size > 0) {
       this.dragTargetDates.forEach(d => this.selectedDates.add(d));
       this.dragTargetDates.clear();
+      document.querySelectorAll('.calendar-day.drag-selecting').forEach(el => el.classList.remove('drag-selecting'));
       this.renderCalendar();
-    }
+      setTimeout(() => {
+        this.hasMovedRange = false;
+      }, 50);
+    } else {
+      // 単一タップ（別セルへ移動していない）の場合
+      document.querySelectorAll('.calendar-day.drag-selecting').forEach(el => el.classList.remove('drag-selecting'));
+      this.dragTargetDates.clear();
 
-    setTimeout(() => {
-      this.dragTriggered = false;
-    }, 100);
+      // スマホタッチでの単一タップの場合、ここで直ちにトグル（選択/解除）を実行！
+      if (this.isTouchMode && this.dragStartDate) {
+        this.handleCellToggleClick(this.dragStartDate);
+        this.justTouched = true;
+        setTimeout(() => {
+          this.justTouched = false;
+        }, 300);
+      }
+    }
+    this.isTouchMode = false;
   }
 
-  handleCellSingleClick(dateStr) {
+  // セルのタップ／再タップでの選択・選択解除トグル
+  handleCellToggleClick(dateStr) {
     if (this.selectedDates.has(dateStr)) {
-      this.selectedDates.delete(dateStr);
+      this.selectedDates.delete(dateStr); // 再タップで選択解除！
     } else {
-      this.selectedDates.add(dateStr);
+      this.selectedDates.add(dateStr);    // 選択！
     }
     this.renderCalendar();
   }
@@ -510,12 +573,18 @@ class ShiftMasterApp {
   updateSelectionInfo() {
     const badge = document.getElementById('selected-count-badge');
     const clearBtn = document.getElementById('btn-clear-selection');
+    const deleteBtn = document.getElementById('btn-delete-selected-shifts');
+    const hasSelection = this.selectedDates.size > 0;
+
     if (badge) {
       badge.textContent = `${this.selectedDates.size}日選択中`;
-      badge.style.display = this.selectedDates.size > 0 ? 'inline-block' : 'none';
+      badge.style.display = hasSelection ? 'inline-block' : 'none';
     }
     if (clearBtn) {
-      clearBtn.style.display = this.selectedDates.size > 0 ? 'inline-block' : 'none';
+      clearBtn.style.display = hasSelection ? 'inline-block' : 'none';
+    }
+    if (deleteBtn) {
+      deleteBtn.style.display = hasSelection ? 'inline-block' : 'none';
     }
   }
 
@@ -864,6 +933,11 @@ class ShiftMasterApp {
       this.clearSelection();
     });
 
+    // 選択プラン削除ボタン（カレンダー操作バー）
+    document.getElementById('btn-delete-selected-shifts')?.addEventListener('click', () => {
+      this.deleteSelectedShifts();
+    });
+
     // ドラッグ選択終了イベント
     window.addEventListener('mouseup', () => {
       this.finishDragSelection();
@@ -939,6 +1013,12 @@ class ShiftMasterApp {
 
     if (targetPane) targetPane.classList.add('active');
     if (targetNav) targetNav.classList.add('active');
+
+    // 設定画面の時はカレンダーを非表示、入力・給与タブでは表示
+    const calWrapper = document.getElementById('calendar-wrapper');
+    if (calWrapper) {
+      calWrapper.style.display = (tabId === 'tab-settings') ? 'none' : 'flex';
+    }
 
     // タブ切り替え時にカレンダー表示を更新
     this.selectedDates.clear();
