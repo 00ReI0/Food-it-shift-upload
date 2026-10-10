@@ -1199,36 +1199,55 @@ class ShiftMasterApp {
   // Googleカレンダー連携 (.ics)
   // ============================================================
   openCalendarExportModal() {
-    const shiftsToExport = this.getConfirmedShiftsForExport();
-    if (shiftsToExport.length === 0) {
-      this.showToast('エクスポート対象の確定シフトがありません');
-      return;
-    }
-
     const modal = document.getElementById('calendar-export-modal');
+    if (!modal) return;
+
     const titleInput = document.getElementById('export-event-title');
     const scopeDesc = document.getElementById('export-scope-desc');
+    const exportBtn = document.getElementById('btn-do-export-ics');
 
     if (titleInput) {
       titleInput.value = this.settings.calendarEventTitle || 'れい　バイト';
     }
 
+    const shiftsToExport = this.getConfirmedShiftsForExport();
+
     if (scopeDesc) {
-      if (this.selectedDates.size > 0) {
-        scopeDesc.textContent = `選択中の日程から確定シフト ${shiftsToExport.length} 件`;
+      if (shiftsToExport.length === 0) {
+        scopeDesc.innerHTML = `⚠️ <strong>出力対象の確定シフトがありません（0件）</strong><br><span style="font-size:0.75rem;color:var(--c-text-muted);font-weight:normal;">確定シフトを登録するか、上の「📥 希望から確定へ反映」を押して確定シフトを作成してください。</span>`;
+        scopeDesc.style.background = '#fef2f2';
+        scopeDesc.style.color = '#ef4444';
+      } else if (this.selectedDates.size > 0) {
+        scopeDesc.innerHTML = `選択中の日程から確定シフト <strong>${shiftsToExport.length} 件</strong>`;
+        scopeDesc.style.background = '#f1f5f9';
+        scopeDesc.style.color = 'var(--c-primary)';
       } else {
         const year = this.currentDate.getFullYear();
         const month = this.currentDate.getMonth() + 1;
-        scopeDesc.textContent = `${year}年${month}月の確定シフト全件 (${shiftsToExport.length} 件)`;
+        scopeDesc.innerHTML = `${year}年${month}月の確定シフト全件 (<strong>${shiftsToExport.length} 件</strong>)`;
+        scopeDesc.style.background = '#f1f5f9';
+        scopeDesc.style.color = 'var(--c-primary)';
       }
     }
 
-    if (modal) modal.classList.add('active');
+    if (exportBtn) {
+      if (shiftsToExport.length === 0) {
+        exportBtn.disabled = true;
+        exportBtn.style.opacity = '0.5';
+        exportBtn.style.cursor = 'not-allowed';
+      } else {
+        exportBtn.disabled = false;
+        exportBtn.style.opacity = '1';
+        exportBtn.style.cursor = 'pointer';
+      }
+    }
+
+    modal.classList.add('show');
   }
 
   closeCalendarExportModal() {
     const modal = document.getElementById('calendar-export-modal');
-    if (modal) modal.classList.remove('active');
+    if (modal) modal.classList.remove('show');
   }
 
   getConfirmedShiftsForExport() {
@@ -1436,6 +1455,18 @@ class ShiftMasterApp {
     });
     document.getElementById('btn-do-export-ics')?.addEventListener('click', () => {
       this.exportConfirmedShiftsToICS();
+    });
+    document.getElementById('calendar-export-modal')?.addEventListener('click', (e) => {
+      if (e.target.id === 'calendar-export-modal') this.closeCalendarExportModal();
+    });
+    document.getElementById('foodit-modal')?.addEventListener('click', (e) => {
+      if (e.target.id === 'foodit-modal') this.closeFoodITModal();
+    });
+    document.getElementById('template-edit-modal')?.addEventListener('click', (e) => {
+      if (e.target.id === 'template-edit-modal') this.closeTemplateEditModal();
+    });
+    document.getElementById('single-shift-modal')?.addEventListener('click', (e) => {
+      if (e.target.id === 'single-shift-modal') this.closeSingleShiftModal();
     });
 
     // テンプレート編集モーダル
