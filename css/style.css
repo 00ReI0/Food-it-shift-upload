@@ -564,6 +564,17 @@ input:checked + .slider:before {
   filter: brightness(0.95);
 }
 
+.chip-btn-cancel {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.chip-btn-cancel:hover {
+  background: #fee2e2;
+  border-color: #f87171;
+}
+
 .chip-color-dot {
   width: 8px;
   height: 8px;

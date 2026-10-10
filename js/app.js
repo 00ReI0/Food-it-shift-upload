@@ -86,6 +86,26 @@ class ShiftMasterApp {
 
     const saved = localStorage.getItem('shift_master_templates');
     this.templates = saved ? JSON.parse(saved) : defaultTemplates;
+
+    // 「シフトの取り消し」プラン（システム固定・削除不可・コメント不可）
+    if (!this.templates.some(t => t.id === 'plan-cancel' || t.type === 'del')) {
+      this.templates.push({
+        id: 'plan-cancel',
+        name: 'シフトの取り消し',
+        type: 'del',
+        start: '',
+        end: '',
+        color: '#ef4444',
+        isSystem: true
+      });
+    } else {
+      const cancelTpl = this.templates.find(t => t.id === 'plan-cancel' || t.type === 'del');
+      if (cancelTpl) {
+        cancelTpl.isSystem = true;
+        cancelTpl.id = 'plan-cancel';
+        cancelTpl.type = 'del';
+      }
+    }
   }
 
   saveTemplates() {
@@ -102,10 +122,22 @@ class ShiftMasterApp {
     this.templates.forEach(tpl => {
       const btn = document.createElement('button');
       btn.className = 'chip-btn';
-      btn.innerHTML = `
-        <span class="chip-color-dot" style="background-color: ${tpl.color};"></span>
-        <span>${tpl.name} (${tpl.start.replace(':00','')}-${tpl.end.replace(':00','')})</span>
-      `;
+      const isCancel = (tpl.id === 'plan-cancel' || tpl.type === 'del');
+
+      if (isCancel) {
+        btn.classList.add('chip-btn-cancel');
+        btn.style.borderColor = '#fca5a5';
+        btn.innerHTML = `
+          <span class="chip-color-dot" style="background-color: ${tpl.color || '#ef4444'};"></span>
+          <span style="font-weight:700;color:#dc2626;">❌ ${tpl.name}</span>
+        `;
+      } else {
+        btn.innerHTML = `
+          <span class="chip-color-dot" style="background-color: ${tpl.color};"></span>
+          <span>${tpl.name} (${tpl.start.replace(':00','')}-${tpl.end.replace(':00','')})</span>
+        `;
+      }
+
       btn.addEventListener('click', () => {
         this.applyTemplate(tpl.id);
       });
@@ -142,19 +174,48 @@ class ShiftMasterApp {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'chip-btn';
-      btn.innerHTML = `
-        <span class="chip-color-dot" style="background-color: ${tpl.color};"></span>
-        <span>${tpl.name} (${tpl.start.replace(':00','')}-${tpl.end.replace(':00','')})</span>
-      `;
+      const isCancel = (tpl.id === 'plan-cancel' || tpl.type === 'del');
+
+      if (isCancel) {
+        btn.innerHTML = `
+          <span class="chip-color-dot" style="background-color: ${tpl.color || '#ef4444'};"></span>
+          <span style="font-weight:700;color:#dc2626;">❌ ${tpl.name}</span>
+        `;
+      } else {
+        btn.innerHTML = `
+          <span class="chip-color-dot" style="background-color: ${tpl.color};"></span>
+          <span>${tpl.name} (${tpl.start.replace(':00','')}-${tpl.end.replace(':00','')})</span>
+        `;
+      }
+
       btn.addEventListener('click', () => {
         const startInput = document.getElementById('single-shift-start');
         const endInput = document.getElementById('single-shift-end');
         const nameInput = document.getElementById('single-shift-name');
         const typeSelect = document.getElementById('single-shift-type');
-        if (startInput) startInput.value = tpl.start;
-        if (endInput) endInput.value = tpl.end;
-        if (nameInput) nameInput.value = tpl.name;
-        if (typeSelect) typeSelect.value = '01|0';
+        const memoInput = document.getElementById('single-shift-memo');
+        const timeGroup = document.getElementById('single-shift-time-group');
+
+        if (isCancel) {
+          if (typeSelect) typeSelect.value = 'del';
+          if (nameInput) nameInput.value = 'シフトの取り消し';
+          if (memoInput) {
+            memoInput.value = '';
+            memoInput.disabled = true;
+            memoInput.placeholder = '（取り消しプランはコメント入力不可）';
+          }
+          if (timeGroup) timeGroup.style.display = 'none';
+        } else {
+          if (typeSelect) typeSelect.value = '01|0';
+          if (startInput) startInput.value = tpl.start;
+          if (endInput) endInput.value = tpl.end;
+          if (nameInput) nameInput.value = tpl.name;
+          if (memoInput) {
+            memoInput.disabled = false;
+            memoInput.placeholder = '例: ラストまで可、22時以降希望など';
+          }
+          if (timeGroup) timeGroup.style.display = 'flex';
+        }
       });
       container.appendChild(btn);
     });
@@ -194,6 +255,11 @@ class ShiftMasterApp {
   }
 
   openTemplateEditModal(templateId) {
+    if (templateId === 'plan-cancel') {
+      this.showToast('「シフトの取り消し」プランは変更・削除できません');
+      return;
+    }
+
     const modal = document.getElementById('template-edit-modal');
     const title = document.getElementById('template-modal-title');
     const deleteBtn = document.getElementById('btn-delete-template');
@@ -233,6 +299,10 @@ class ShiftMasterApp {
     const color = document.getElementById('template-color-input').value;
 
     if (this.editingTemplateId) {
+      if (this.editingTemplateId === 'plan-cancel') {
+        this.showToast('「シフトの取り消し」プランは変更できません');
+        return;
+      }
       const tpl = this.templates.find(t => t.id === this.editingTemplateId);
       if (tpl) {
         tpl.name = name;
@@ -252,6 +322,10 @@ class ShiftMasterApp {
 
   deleteTemplateFromModal() {
     if (!this.editingTemplateId) return;
+    if (this.editingTemplateId === 'plan-cancel') {
+      this.showToast('「シフトの取り消し」プランは削除できません');
+      return;
+    }
     this.templates = this.templates.filter(t => t.id !== this.editingTemplateId);
     this.saveTemplates();
     this.closeTemplateEditModal();
@@ -474,32 +548,48 @@ class ShiftMasterApp {
     const targetSource = (this.activeTab === 'tab-confirmed') ? this.confirmedShifts : this.requestedShifts;
     const shift = targetSource[dateStr];
 
-    if (shift && shift.start && shift.end) {
-      const tag = document.createElement('div');
-      tag.className = 'shift-tag';
+    if (shift) {
+      if (shift.type === 'del' || shift.isDelete) {
+        const tag = document.createElement('div');
+        tag.className = 'shift-tag shift-tag-cancel';
+        tag.textContent = '❌ 取消';
+        tag.style.backgroundColor = '#ef4444';
+        tag.style.color = '#ffffff';
+        cell.appendChild(tag);
 
-      const matchedTpl = this.templates.find(t => t.start === shift.start && t.end === shift.end);
-      if (shift.type === '03|1') {
-        tag.textContent = '有給';
-        tag.style.backgroundColor = '#ea580c';
-      } else if (shift.name) {
-        tag.textContent = shift.name;
-        tag.style.backgroundColor = matchedTpl ? matchedTpl.color : '#1b2a4a';
-      } else if (matchedTpl) {
-        tag.textContent = matchedTpl.name;
-        tag.style.backgroundColor = matchedTpl.color;
-      } else {
-        tag.textContent = shift.memo || '勤務';
-        tag.style.backgroundColor = '#1b2a4a';
+        const timeSub = document.createElement('div');
+        timeSub.className = 'shift-time-sub';
+        timeSub.textContent = '削除希望';
+        timeSub.style.color = '#ef4444';
+        timeSub.style.fontWeight = 'bold';
+        cell.appendChild(timeSub);
+      } else if (shift.start && shift.end) {
+        const tag = document.createElement('div');
+        tag.className = 'shift-tag';
+
+        const matchedTpl = this.templates.find(t => t.start === shift.start && t.end === shift.end);
+        if (shift.type === '03|1') {
+          tag.textContent = '有給';
+          tag.style.backgroundColor = '#ea580c';
+        } else if (shift.name) {
+          tag.textContent = shift.name;
+          tag.style.backgroundColor = matchedTpl ? matchedTpl.color : '#1b2a4a';
+        } else if (matchedTpl) {
+          tag.textContent = matchedTpl.name;
+          tag.style.backgroundColor = matchedTpl.color;
+        } else {
+          tag.textContent = shift.memo || '勤務';
+          tag.style.backgroundColor = '#1b2a4a';
+        }
+        cell.appendChild(tag);
+
+        const timeSub = document.createElement('div');
+        timeSub.className = 'shift-time-sub';
+        timeSub.textContent = (shift.type === '03|1') 
+          ? '有休' 
+          : `${shift.start.replace(':00','')}-${shift.end.replace(':00','')}`;
+        cell.appendChild(timeSub);
       }
-      cell.appendChild(tag);
-
-      const timeSub = document.createElement('div');
-      timeSub.className = 'shift-time-sub';
-      timeSub.textContent = (shift.type === '03|1') 
-        ? '有休' 
-        : `${shift.start.replace(':00','')}-${shift.end.replace(':00','')}`;
-      cell.appendChild(timeSub);
     }
 
     // マウスドラッグ操作（一括選択モード中のみ）
@@ -750,7 +840,7 @@ class ShiftMasterApp {
     const existing = targetStore[dateStr];
 
     if (existing) {
-      if (typeSelect) typeSelect.value = existing.type || '01|0';
+      if (typeSelect) typeSelect.value = (existing.type === 'del' || existing.isDelete) ? 'del' : (existing.type || '01|0');
       if (startInput) startInput.value = existing.start || '18:00';
       if (endInput) endInput.value = existing.end || '23:00';
       if (nameInput) nameInput.value = existing.name || existing.memo || '';
@@ -766,8 +856,19 @@ class ShiftMasterApp {
     }
 
     const updateTimeVisibility = () => {
+      const isDel = (typeSelect && typeSelect.value === 'del');
+      const isPaidLeave = (typeSelect && typeSelect.value === '03|1');
+
       if (timeGroup) {
-        timeGroup.style.display = (typeSelect && typeSelect.value === '03|1') ? 'none' : 'flex';
+        timeGroup.style.display = (isPaidLeave || isDel) ? 'none' : 'flex';
+      }
+      if (memoInput) {
+        memoInput.disabled = isDel;
+        if (isDel) memoInput.value = '';
+        memoInput.placeholder = isDel ? '（取り消しプランはコメント入力不可）' : '例: ラストまで可、22時以降希望など';
+      }
+      if (nameInput && isDel && !nameInput.value) {
+        nameInput.value = 'シフトの取り消し';
       }
     };
     if (typeSelect) typeSelect.onchange = updateTimeVisibility;
@@ -789,19 +890,33 @@ class ShiftMasterApp {
     const isConfirmed = (this.editingSingleTarget === 'confirmed');
 
     const type = document.getElementById('single-shift-type')?.value || '01|0';
+    const isCancel = (type === 'del');
     const isPaidLeave = (type === '03|1');
-    const start = isPaidLeave ? '10:00' : (document.getElementById('single-shift-start')?.value || '18:00');
-    const end = isPaidLeave ? '17:00' : (document.getElementById('single-shift-end')?.value || '23:00');
-    const name = document.getElementById('single-shift-name')?.value.trim() || (isPaidLeave ? '有給' : '勤務');
-    const memo = document.getElementById('single-shift-memo')?.value.trim() || '';
 
-    const shiftData = {
-      type,
-      start,
-      end,
-      name,
-      memo: memo || name
-    };
+    let shiftData;
+    if (isCancel) {
+      shiftData = {
+        type: 'del',
+        isDelete: true,
+        start: '',
+        end: '',
+        name: 'シフトの取り消し',
+        memo: ''
+      };
+    } else {
+      const start = isPaidLeave ? '10:00' : (document.getElementById('single-shift-start')?.value || '18:00');
+      const end = isPaidLeave ? '17:00' : (document.getElementById('single-shift-end')?.value || '23:00');
+      const name = document.getElementById('single-shift-name')?.value.trim() || (isPaidLeave ? '有給' : '勤務');
+      const memo = document.getElementById('single-shift-memo')?.value.trim() || '';
+
+      shiftData = {
+        type,
+        start,
+        end,
+        name,
+        memo: memo || name
+      };
+    }
 
     if (isConfirmed) {
       this.confirmedShifts[dateStr] = shiftData;
@@ -858,16 +973,28 @@ class ShiftMasterApp {
       return;
     }
 
+    const isCancel = (tpl.id === 'plan-cancel' || tpl.type === 'del');
     const targetStore = (this.activeTab === 'tab-confirmed') ? this.confirmedShifts : this.requestedShifts;
 
     this.selectedDates.forEach(dateStr => {
-      targetStore[dateStr] = {
-        type: '01|0',
-        start: tpl.start,
-        end: tpl.end,
-        name: tpl.name,
-        memo: tpl.name
-      };
+      if (isCancel) {
+        targetStore[dateStr] = {
+          type: 'del',
+          isDelete: true,
+          start: '',
+          end: '',
+          name: 'シフトの取り消し',
+          memo: ''
+        };
+      } else {
+        targetStore[dateStr] = {
+          type: '01|0',
+          start: tpl.start,
+          end: tpl.end,
+          name: tpl.name,
+          memo: tpl.name
+        };
+      }
     });
 
     if (this.activeTab === 'tab-confirmed') {
@@ -879,6 +1006,7 @@ class ShiftMasterApp {
     this.showToast(`${this.selectedDates.size}日間に「${tpl.name}」を一括登録しました`);
     this.selectedDates.clear();
     this.renderCalendar();
+    this.renderSalarySummary();
   }
 
   // ============================================================
@@ -899,11 +1027,11 @@ class ShiftMasterApp {
       isCurrentMonthDefault = true;
     }
 
-    // 選択された日付の中で希望シフトが存在するものを抽出
+    // 選択された日付の中で希望シフトが存在するものを抽出（取り消しプランも含む）
     const targets = targetDates
       .sort()
       .map(dateStr => ({ dateStr, shift: this.requestedShifts[dateStr] }))
-      .filter(item => item.shift && item.shift.start && item.shift.end);
+      .filter(item => item.shift && ((item.shift.start && item.shift.end) || item.shift.type === 'del' || item.shift.isDelete));
 
     const year = this.currentDate.getFullYear();
     const month = this.currentDate.getMonth() + 1;
@@ -917,6 +1045,9 @@ class ShiftMasterApp {
       return;
     }
 
+    const cancelCount = targets.filter(t => t.shift.type === 'del' || t.shift.isDelete).length;
+    const applyCount = targets.length - cancelCount;
+
     const modal = document.getElementById('foodit-modal');
     const titleElem = document.getElementById('foodit-modal-title');
     const descElem = document.getElementById('foodit-modal-desc');
@@ -924,33 +1055,65 @@ class ShiftMasterApp {
     listContainer.innerHTML = '';
 
     if (titleElem) {
-      titleElem.textContent = isCurrentMonthDefault
-        ? `シフト希望申請 (${year}年${month}月度 全${targets.length}件)`
-        : `シフト希望申請 (${targets.length}件選択中)`;
+      if (cancelCount > 0 && applyCount > 0) {
+        titleElem.textContent = isCurrentMonthDefault
+          ? `シフト希望申請 (${year}年${month}月度: 申請${applyCount}件 / 取消${cancelCount}件)`
+          : `シフト希望申請 (申請${applyCount}件 / 取消${cancelCount}件)`;
+      } else if (cancelCount > 0 && applyCount === 0) {
+        titleElem.textContent = isCurrentMonthDefault
+          ? `シフト取り消し申請 (${year}年${month}月度 全${cancelCount}件)`
+          : `シフト取り消し申請 (全${cancelCount}件)`;
+      } else {
+        titleElem.textContent = isCurrentMonthDefault
+          ? `シフト希望申請 (${year}年${month}月度 全${targets.length}件)`
+          : `シフト希望申請 (${targets.length}件選択中)`;
+      }
     }
+
     if (descElem) {
-      descElem.textContent = isCurrentMonthDefault
-        ? `現在表示中の${year}年${month}月に登録されている希望シフト（全${targets.length}件）をFoodITへ送信します。`
-        : `選択した${targets.length}日間のシフトをFoodITへ送信します。`;
+      if (cancelCount > 0) {
+        descElem.innerHTML = `選択中のシフトをFoodITへ送信します。<br><span style="color:#ef4444;font-weight:bold;">⚠️ シフト取り消しが ${cancelCount} 件含まれています（送信後にカレンダーから自動削除されます）。</span>`;
+      } else {
+        descElem.textContent = isCurrentMonthDefault
+          ? `現在表示中の${year}年${month}月に登録されている希望シフト（全${targets.length}件）をFoodITへ送信します。`
+          : `選択した${targets.length}日間のシフトをFoodITへ送信します。`;
+      }
     }
 
     this.pendingSubmitTargets = targets;
 
     document.getElementById('btn-foodit-submit-all').style.display = 'flex';
     targets.forEach(({ dateStr, shift }) => {
+      const isDel = (shift.type === 'del' || shift.isDelete);
       const item = document.createElement('div');
       item.className = 'confirmed-item';
-      item.innerHTML = `
-        <div>
-          <div class="confirmed-date">${dateStr}</div>
-          <div class="confirmed-time">${shift.start}〜${shift.end} ${shift.name ? `(${shift.name})` : ''}</div>
-          ${shift.memo && shift.memo !== shift.name ? `<div class="confirmed-memo">💬 ${shift.memo}</div>` : ''}
-        </div>
-        <div style="display:flex;gap:6px;">
-          <button class="header-btn" style="background:var(--c-primary);color:#fff;" onclick="window.app.submitSingleFoodIT('${dateStr}')">送信</button>
-          <button class="header-btn" style="background:#f1f5f9;color:var(--c-primary);" onclick="window.app.showCurl('${dateStr}')">cURL</button>
-        </div>
-      `;
+
+      if (isDel) {
+        item.style.borderLeft = '4px solid #ef4444';
+        item.style.backgroundColor = '#fef2f2';
+        item.innerHTML = `
+          <div>
+            <div class="confirmed-date" style="color:#b91c1c;">${dateStr} <span style="font-size:0.75rem;background:#fee2e2;color:#dc2626;padding:2px 6px;border-radius:4px;font-weight:bold;">⚠️ 取消申請</span></div>
+            <div class="confirmed-time" style="color:#64748b;font-size:0.8rem;">FoodITからこの日の希望シフトを削除</div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button class="header-btn" style="background:#dc2626;color:#fff;" onclick="window.app.submitSingleFoodIT('${dateStr}')">取消送信</button>
+            <button class="header-btn" style="background:#fff;color:var(--c-primary);border:1px solid #cbd5e1;" onclick="window.app.showCurl('${dateStr}')">cURL</button>
+          </div>
+        `;
+      } else {
+        item.innerHTML = `
+          <div>
+            <div class="confirmed-date">${dateStr}</div>
+            <div class="confirmed-time">${shift.start}〜${shift.end} ${shift.name ? `(${shift.name})` : ''}</div>
+            ${shift.memo && shift.memo !== shift.name ? `<div class="confirmed-memo">💬 ${shift.memo}</div>` : ''}
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button class="header-btn" style="background:var(--c-primary);color:#fff;" onclick="window.app.submitSingleFoodIT('${dateStr}')">送信</button>
+            <button class="header-btn" style="background:#f1f5f9;color:var(--c-primary);" onclick="window.app.showCurl('${dateStr}')">cURL</button>
+          </div>
+        `;
+      }
       listContainer.appendChild(item);
     });
 
@@ -970,8 +1133,18 @@ class ShiftMasterApp {
       return;
     }
 
+    const isDel = (shift.type === 'del' || shift.isDelete);
     window.FoodIT.submitDirectForm(dateStr, shift, this.settings, true);
-    this.showToast(`${dateStr} を送信しました`);
+
+    if (isDel) {
+      delete this.requestedShifts[dateStr];
+      this.saveRequestedShifts();
+      this.renderCalendar();
+      this.renderSalarySummary();
+      this.showToast(`${dateStr} のシフト取り消しを送信し、カレンダーから削除しました`);
+    } else {
+      this.showToast(`${dateStr} を送信しました`);
+    }
   }
 
   submitSelectedFoodIT() {
@@ -982,13 +1155,29 @@ class ShiftMasterApp {
     }
 
     let idx = 0;
+    const deletedDates = [];
+
     const sendNext = () => {
       if (idx >= targets.length) {
-        this.showToast('選択したシフトの申請が完了しました！');
+        if (deletedDates.length > 0) {
+          deletedDates.forEach(d => {
+            delete this.requestedShifts[d];
+          });
+          this.saveRequestedShifts();
+          this.renderCalendar();
+          this.renderSalarySummary();
+          this.showToast(`申請が完了しました！（取り消し分${deletedDates.length}件をカレンダーから削除しました）`);
+        } else {
+          this.showToast('選択したシフトの申請が完了しました！');
+        }
         this.closeFoodITModal();
         return;
       }
       const { dateStr, shift } = targets[idx];
+      const isDel = (shift.type === 'del' || shift.isDelete);
+      if (isDel) {
+        deletedDates.push(dateStr);
+      }
       window.FoodIT.submitDirectForm(dateStr, shift, this.settings, true);
       idx++;
       if (idx < targets.length) {
@@ -996,7 +1185,12 @@ class ShiftMasterApp {
       }
     };
 
-    if (confirm(`表示中の${targets.length}日分のシフトを申請しますか？`)) {
+    const cancelCount = targets.filter(t => t.shift.type === 'del' || t.shift.isDelete).length;
+    const confirmMsg = cancelCount > 0
+      ? `表示中の${targets.length}日分のシフトを申請しますか？\n（※取り消しシフトが ${cancelCount} 件含まれており、送信完了後にカレンダーから削除されます）`
+      : `表示中の${targets.length}日分のシフトを申請しますか？`;
+
+    if (confirm(confirmMsg)) {
       sendNext();
     }
   }
@@ -1038,7 +1232,7 @@ class ShiftMasterApp {
       .sort((a, b) => a[0].localeCompare(b[0]));
 
     monthShifts.forEach(([dateStr, shift]) => {
-      if (!shift || !shift.start || !shift.end) return;
+      if (!shift || !shift.start || !shift.end || shift.type === 'del' || shift.isDelete) return;
 
       const calc = this.calculateDaySalary(shift);
       totalRegHours += calc.regularHours;
@@ -1133,7 +1327,7 @@ class ShiftMasterApp {
     const prefix = `${year}-${month}`;
 
     const monthReq = Object.entries(this.requestedShifts)
-      .filter(([dateStr]) => dateStr.startsWith(prefix) && this.requestedShifts[dateStr]?.start);
+      .filter(([dateStr]) => dateStr.startsWith(prefix) && this.requestedShifts[dateStr]?.start && this.requestedShifts[dateStr]?.type !== 'del' && !this.requestedShifts[dateStr]?.isDelete);
 
     if (monthReq.length === 0) {
       this.showToast('反映可能な希望シフトがありません');
@@ -1183,13 +1377,18 @@ class ShiftMasterApp {
     this.templates.forEach(tpl => {
       const item = document.createElement('div');
       item.className = 'template-manage-item';
+      const isSystem = (tpl.isSystem || tpl.id === 'plan-cancel' || tpl.type === 'del');
+
       item.innerHTML = `
         <div style="display:flex;align-items:center;gap:8px;">
-          <span class="chip-color-dot" style="background-color:${tpl.color};"></span>
+          <span class="chip-color-dot" style="background-color:${tpl.color || '#ef4444'};"></span>
           <strong>${tpl.name}</strong>
-          <span style="font-size:0.75rem;color:var(--c-text-muted);">${tpl.start}〜${tpl.end}</span>
+          <span style="font-size:0.75rem;color:var(--c-text-muted);">${isSystem ? '取り消し専用' : `${tpl.start}〜${tpl.end}`}</span>
         </div>
-        <button class="header-btn" style="background:var(--c-primary);color:#fff;" onclick="window.app.openTemplateEditModal('${tpl.id}')">編集</button>
+        ${isSystem 
+          ? `<span style="font-size:0.75rem;color:var(--c-text-muted);background:#f1f5f9;padding:4px 8px;border-radius:4px;font-weight:bold;">固定（変更・削除不可）</span>`
+          : `<button class="header-btn" style="background:var(--c-primary);color:#fff;" onclick="window.app.openTemplateEditModal('${tpl.id}')">編集</button>`
+        }
       `;
       list.appendChild(item);
     });
